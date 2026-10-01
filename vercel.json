@@ -1,0 +1,62 @@
+{
+  "version": 2,
+  "buildCommand": "cd mobile && npm install && npm run build",
+  "outputDirectory": "mobile/dist",
+  "routes": [
+    {
+      "src": "/auth/(.*)",
+      "dest": "/api/index.ts"
+    },
+    {
+      "src": "/services/(.*)",
+      "dest": "/api/index.ts"
+    },
+    {
+      "src": "/appointments/(.*)",
+      "dest": "/api/index.ts"
+    },
+    {
+      "src": "/clients/(.*)",
+      "dest": "/api/index.ts"
+    },
+    {
+      "src": "/analytics/(.*)",
+      "dest": "/api/index.ts"
+    },
+    {
+      "src": "/portfolio/(.*)",
+      "dest": "/api/index.ts"
+    },
+    {
+      "src": "/profile/(.*)",
+      "dest": "/api/index.ts"
+    },
+    {
+      "src": "/public/(.*)",
+      "dest": "/api/index.ts"
+    },
+    {
+      "src": "/salons/(.*)",
+      "dest": "/api/index.ts"
+    },
+    {
+      "src": "/booking-requests/(.*)",
+      "dest": "/api/index.ts"
+    },
+    {
+      "src": "/health",
+      "dest": "/api/index.ts"
+    },
+    {
+      "src": "/api/(.*)",
+      "dest": "/api/index.ts"
+    },
+    {
+      "handle": "filesystem"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/index.html"
+    }
+  ]
+}

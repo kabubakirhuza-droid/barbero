@@ -1,0 +1,11 @@
+node_modules/
+dist/
+mobile/dist/
+backend/dist/
+.env
+.env.local
+.expo/
+.vercel
+*.log
+.DS_Store
+Thumbs.db

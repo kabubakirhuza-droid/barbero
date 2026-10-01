@@ -1,0 +1,356 @@
+{
+  "users": [
+    {
+      "id": "u-1",
+      "phone": "+998900335102",
+      "phoneVerified": true,
+      "ism": "Abubakir",
+      "familiya": "Kamalov",
+      "fullName": "Abubakir Kamalov",
+      "role": "MASTER",
+      "username": "abubakir",
+      "avatarUrl": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&q=80",
+      "bio": "Professional Barbero Master & Stylist",
+      "subscriptionStatus": "premium",
+      "subscriptionUntil": "2026-12-31T00:00:00.000Z",
+      "createdAt": "2026-01-10T10:00:00Z"
+    },
+    {
+      "id": "u-2",
+      "phone": "+998901112233",
+      "phoneVerified": true,
+      "ism": "Bobur",
+      "familiya": "Usmonov",
+      "fullName": "Bobur Usmonov",
+      "role": "MASTER",
+      "username": "bobur_u",
+      "avatarUrl": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&q=80",
+      "bio": "Fade Master & Beard Sculptor",
+      "subscriptionStatus": "premium",
+      "subscriptionUntil": "2026-12-31T00:00:00.000Z",
+      "createdAt": "2026-01-12T10:00:00Z"
+    },
+    {
+      "id": "u-3",
+      "phone": "+998902223344",
+      "phoneVerified": true,
+      "ism": "Kamron",
+      "familiya": "Saidov",
+      "fullName": "Kamron Saidov",
+      "role": "MASTER",
+      "username": "kamron_s",
+      "avatarUrl": "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=200&q=80",
+      "bio": "Classic Cuts & Hot Towel Treatment",
+      "subscriptionStatus": "premium",
+      "subscriptionUntil": "2026-12-31T00:00:00.000Z",
+      "createdAt": "2026-01-14T10:00:00Z"
+    },
+    {
+      "id": "client-1",
+      "phone": "+998909998877",
+      "phoneVerified": true,
+      "ism": "Sardor",
+      "familiya": "Rahimov",
+      "fullName": "Sardor Rahimov",
+      "role": "CLIENT",
+      "username": "sardor_r",
+      "createdAt": "2026-02-01T10:00:00Z"
+    }
+  ],
+  "salons": [
+    {
+      "id": "salon-1",
+      "name": "BARBERO Tashkent Central",
+      "address": "Toshkent sh., Amir Temur shoh ko‘chasi, 28",
+      "latitude": 41.3111,
+      "longitude": 69.2797,
+      "createdBy": "u-1",
+      "workingHours": "09:00 - 21:00",
+      "rating": 4.9,
+      "reviewsCount": 142,
+      "createdAt": "2026-01-15T10:00:00Z"
+    },
+    {
+      "id": "salon-2",
+      "name": "BARBERO Chilonzor Club",
+      "address": "Toshkent sh., Chilonzor 9-mavze, 12-uy",
+      "latitude": 41.2825,
+      "longitude": 69.2154,
+      "createdBy": "u-3",
+      "workingHours": "09:00 - 22:00",
+      "rating": 4.8,
+      "reviewsCount": 88,
+      "createdAt": "2026-02-10T12:00:00Z"
+    }
+  ],
+  "salonMembers": [
+    {
+      "id": "sm-1",
+      "salonId": "salon-1",
+      "masterId": "u-1",
+      "role": "owner",
+      "joinedAt": "2026-01-15T10:00:00Z"
+    },
+    {
+      "id": "sm-2",
+      "salonId": "salon-1",
+      "masterId": "u-2",
+      "role": "master",
+      "joinedAt": "2026-01-20T10:00:00Z"
+    },
+    {
+      "id": "sm-3",
+      "salonId": "salon-2",
+      "masterId": "u-3",
+      "role": "owner",
+      "joinedAt": "2026-02-10T12:00:00Z"
+    }
+  ],
+  "services": [
+    {
+      "id": "srv-1",
+      "userId": "u-1",
+      "salonId": "salon-1",
+      "name": "Klassik erkaklar soch turmagi",
+      "price": 60000,
+      "duration": 30,
+      "badgeColor": "#A67C2E",
+      "isActive": true
+    },
+    {
+      "id": "srv-2",
+      "userId": "u-1",
+      "salonId": "salon-1",
+      "name": "Soch + soqol shakllantirish",
+      "price": 90000,
+      "duration": 45,
+      "badgeColor": "#2563EB",
+      "isActive": true
+    },
+    {
+      "id": "srv-3",
+      "userId": "u-1",
+      "salonId": "salon-1",
+      "name": "Soqol olish va issiq sochiq",
+      "price": 45000,
+      "duration": 25,
+      "badgeColor": "#059669",
+      "isActive": true
+    },
+    {
+      "id": "srv-4",
+      "userId": "u-2",
+      "salonId": "salon-1",
+      "name": "Klassik erkaklar soch turmagi",
+      "price": 60000,
+      "duration": 30,
+      "badgeColor": "#A67C2E",
+      "isActive": true
+    },
+    {
+      "id": "srv-5",
+      "userId": "u-2",
+      "salonId": "salon-1",
+      "name": "Skin Fade + Styling",
+      "price": 75000,
+      "duration": 40,
+      "badgeColor": "#7C3AED",
+      "isActive": true
+    },
+    {
+      "id": "srv-6",
+      "userId": "u-3",
+      "salonId": "salon-2",
+      "name": "Erkaklar soch olishi",
+      "price": 50000,
+      "duration": 30,
+      "badgeColor": "#A67C2E",
+      "isActive": true
+    }
+  ],
+  "clients": [
+    {
+      "id": "c-1",
+      "userId": "u-1",
+      "name": "Sardor Rahimov",
+      "phone": "+998909998877",
+      "notes": "Doimiy mijoz, faqat qaychi bilan",
+      "totalSpent": 150000,
+      "visitsCount": 3
+    },
+    {
+      "id": "c-2",
+      "userId": "u-1",
+      "name": "Jamshid Tursunov",
+      "phone": "+998901234567",
+      "notes": "Fade soch turmagi",
+      "totalSpent": 90000,
+      "visitsCount": 1
+    }
+  ],
+  "appointments": [
+    {
+      "id": "apt-1",
+      "salonId": "salon-1",
+      "userId": "u-1",
+      "clientId": "c-1",
+      "clientUserId": "client-1",
+      "clientName": "Sardor Rahimov",
+      "clientPhone": "+998909998877",
+      "serviceId": "srv-2",
+      "serviceName": "Soch + soqol shakllantirish",
+      "servicePrice": 90000,
+      "badgeColor": "#2563EB",
+      "date": "2026-10-01",
+      "startTime": "14:00",
+      "endTime": "14:45",
+      "duration": 45,
+      "status": "confirmed",
+      "createdAt": "2026-09-28T10:00:00Z"
+    },
+    {
+      "id": "apt-2",
+      "salonId": "salon-1",
+      "userId": "u-1",
+      "clientId": "c-2",
+      "clientName": "Jamshid Tursunov",
+      "clientPhone": "+998901234567",
+      "serviceId": "srv-1",
+      "serviceName": "Klassik erkaklar soch turmagi",
+      "servicePrice": 60000,
+      "badgeColor": "#A67C2E",
+      "date": "2026-10-01",
+      "startTime": "11:00",
+      "endTime": "11:30",
+      "duration": 30,
+      "status": "confirmed",
+      "createdAt": "2026-09-28T11:00:00Z"
+    }
+  ],
+  "workingHours": [
+    {
+      "id": "wh-1",
+      "userId": "u-1",
+      "dayOfWeek": "Dushanba",
+      "dayIndex": 1,
+      "isWorking": true,
+      "startTime": "09:00",
+      "endTime": "21:00",
+      "lunchStart": "13:00",
+      "lunchEnd": "14:00"
+    },
+    {
+      "id": "wh-2",
+      "userId": "u-1",
+      "dayOfWeek": "Seshanba",
+      "dayIndex": 2,
+      "isWorking": true,
+      "startTime": "09:00",
+      "endTime": "21:00",
+      "lunchStart": "13:00",
+      "lunchEnd": "14:00"
+    },
+    {
+      "id": "wh-3",
+      "userId": "u-1",
+      "dayOfWeek": "Chorshanba",
+      "dayIndex": 3,
+      "isWorking": true,
+      "startTime": "09:00",
+      "endTime": "21:00",
+      "lunchStart": "13:00",
+      "lunchEnd": "14:00"
+    },
+    {
+      "id": "wh-4",
+      "userId": "u-1",
+      "dayOfWeek": "Payshanba",
+      "dayIndex": 4,
+      "isWorking": true,
+      "startTime": "09:00",
+      "endTime": "21:00",
+      "lunchStart": "13:00",
+      "lunchEnd": "14:00"
+    },
+    {
+      "id": "wh-5",
+      "userId": "u-1",
+      "dayOfWeek": "Juma",
+      "dayIndex": 5,
+      "isWorking": true,
+      "startTime": "09:00",
+      "endTime": "21:00",
+      "lunchStart": "13:00",
+      "lunchEnd": "14:00"
+    },
+    {
+      "id": "wh-6",
+      "userId": "u-1",
+      "dayOfWeek": "Shanba",
+      "dayIndex": 6,
+      "isWorking": true,
+      "startTime": "09:00",
+      "endTime": "21:00",
+      "lunchStart": "13:00",
+      "lunchEnd": "14:00"
+    },
+    {
+      "id": "wh-7",
+      "userId": "u-1",
+      "dayOfWeek": "Yakshanba",
+      "dayIndex": 7,
+      "isWorking": false,
+      "startTime": "09:00",
+      "endTime": "21:00",
+      "lunchStart": "13:00",
+      "lunchEnd": "14:00"
+    }
+  ],
+  "portfolio": [
+    {
+      "id": "pt-1",
+      "userId": "u-1",
+      "imageUrl": "https://images.unsplash.com/photo-1503951914875-452162b0f3f1?w=600&q=80",
+      "caption": "Klassik erkaklar soch turmagi & soqol konturi",
+      "likesCount": 38,
+      "isPublic": true,
+      "createdAt": "2026-09-20T10:00:00Z"
+    },
+    {
+      "id": "pt-2",
+      "userId": "u-1",
+      "imageUrl": "https://images.unsplash.com/photo-1622286342621-4bd786c2447c?w=600&q=80",
+      "caption": "Skin fade soch uslubi",
+      "likesCount": 52,
+      "isPublic": true,
+      "createdAt": "2026-09-22T14:30:00Z"
+    }
+  ],
+  "bookingRequests": [],
+  "notifications": [
+    {
+      "id": "notif-1",
+      "userId": "u-1",
+      "type": "system",
+      "title": "BARBERO tizimiga xush kelibsiz!",
+      "message": "Barcha yangi mijozlar va yozuvlar shu yerda aks etadi.",
+      "isRead": false,
+      "createdAt": "2026-10-01T14:34:33.419Z"
+    }
+  ],
+  "pushSubscriptions": [],
+  "auditLogs": [],
+  "userSettings": {
+    "bookingLinkActive": true,
+    "allowCustomTimeRequest": false,
+    "allowLunchTimeBooking": false,
+    "dailyReminderActive": true,
+    "dailyReminderTime": "09:00",
+    "aiModeActive": true,
+    "clientSmsReminderActive": true,
+    "appLanguage": "uz",
+    "theme": "light",
+    "securityPin": "1234",
+    "biometricsEnabled": true
+  }
+}

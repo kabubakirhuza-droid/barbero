@@ -1,0 +1,27 @@
+{
+  "expo": {
+    "name": "BARBERO",
+    "slug": "barbero",
+    "version": "1.0.9",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "backgroundColor": "#FBF8F4"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "uz.barbero.app"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#FBF8F4"
+      },
+      "package": "uz.barbero.app"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro"
+    }
+  }
+}
