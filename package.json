@@ -1,0 +1,14 @@
+{
+  "name": "barbero-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev:backend": "cd backend && npm run dev",
+    "dev:mobile": "cd mobile && npm run web",
+    "dev": "cd backend && npm run dev",
+    "start": "cd mobile && npm start",
+    "build:mobile": "cd mobile && npm run build",
+    "build:backend": "cd backend && npm run build",
+    "build": "cd mobile && npm run build"
+  }
+}
