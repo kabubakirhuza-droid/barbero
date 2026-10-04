@@ -1,6 +1,6 @@
-# Planr — Rasmiy Mobil Ilova va Backend (1-ga-1 Nusxa)
+# Barbero — Rasmiy Mobil Ilova va Backend
 
-Planr — go'zallik ustalari (barber, sartarosh, vizajist) uchun mijozlar navbati, bron qilish va daromad hisob-kitoblarini yurituvchi zamonaviy mobil ilova va backend tizimi.
+Barbero — go'zallik ustalari (barber, sartarosh, vizajist) uchun mijozlar navbati, bron qilish va daromad hisob-kitoblarini yurituvchi zamonaviy mobil ilova va backend tizimi.
 
 ---
 
@@ -8,7 +8,7 @@ Planr — go'zallik ustalari (barber, sartarosh, vizajist) uchun mijozlar navbat
 
 - **Mobil Ilova:** React Native (Expo SDK 52) + TypeScript
 - **Dizayn tizimi:** Warm Cream (`#FBF8F4`), Oltin-jigarrang (`#A67C2E`), Kartochkalar (`#FFFFFF`, radius 16-20), Lucide Icons, Haptics
-- **Backend:** Node.js (Express) + TypeScript
+- **Backend:** Node.js (Express) + TypeScript + Web Push (`web-push` / VAPID)
 - **Ma'lumotlar bazasi:** PostgreSQL (DDL schema: `backend/src/schema.sql`) + tezkor lokal xotira
 - **Autentifikatsiya:** Telefon raqam + Telegram Gateway API (`sendVerificationMessage`, `checkVerificationStatus`) + JWT Access/Refresh tokenlar
 - **Tillari:** O'zbekcha (lotin yozuvi, asosiy) va Ruscha (sozlamalardan o'zgartiriladi)
@@ -23,6 +23,7 @@ CRM_claude_Ai/
 │   ├── src/
 │   │   ├── config.ts              # Konfiguratsiya va xavfsiz o'zgaruvchilar
 │   │   ├── telegramGateway.ts     # Telegram Gateway API integratsiyasi
+│   │   ├── pushService.ts         # VAPID Web Push bildirishnomalar servisi
 │   │   ├── schema.sql             # PostgreSQL to'liq jadvallar strukturasi
 │   │   ├── db.ts                  # PostgreSQL ulanishi va boshlang'ich ma'lumotlar
 │   │   ├── routes/
@@ -30,20 +31,22 @@ CRM_claude_Ai/
 │   │   │   ├── services.ts        # Xizmatlar CRUD
 │   │   │   ├── appointments.ts    # Jadval va bandliklar CRUD
 │   │   │   ├── clients.ts         # Mijozlar bazasi
-│   │   │   ├── analytics.ts       # Daromad dinamikasi va metrikalar
+│   │   │   ├── analytics.ts       # Daromad dinamikasi va metrikalar (Asia/Tashkent)
+│   │   │   ├── push.ts            # Web Push obunalari va diagnostika
 │   │   │   ├── shop.ts            # Do'kon mahsulotlari va savat
-│   │   │   ├── portfolio.ts       # Usta portfolio rasmlari
+│   │   │   ├── portfolio.ts       # Portfolio rasmlari
 │   │   │   ├── profile.ts         # Ish vaqti va sozlamalar
-│   │   │   └── publicBooking.ts   # planr.uz/b/{username} onlayn bron sahifasi
+│   │   │   └── publicBooking.ts   # Onlayn bron sahifasi
 │   │   └── index.ts               # Server entrypoint (Port 5000)
-│   ├── .env                       # TELEGRAM_GATEWAY_TOKEN va sirlar
+│   ├── .env                       # TELEGRAM_GATEWAY_TOKEN, VAPID kalitlari
 │   └── package.json
 │
 └── mobile/
     ├── src/
-    │   ├── theme/colors.ts        # Planr dizayn tizimi ranglari
+    │   ├── theme/colors.ts        # Barbero dizayn tizimi ranglari
     │   ├── i18n/                  # O'zbekcha va Ruscha tarjimalar
-    │   ├── api/apiClient.ts       # Backend bilan API aloqasi
+    │   ├── api/apiClient.ts       # Backend bilan API aloqasi (15s timeout, avto-retry)
+    │   ├── utils/pushManager.ts   # Web Push & Service Worker integratsiyasi
     │   ├── components/            # Header, FloatingTabBar, BottomSheet, Button, Skeleton
     │   └── screens/
     │       ├── OnboardingScreen.tsx  # 4 ta slayd, animatsion maketlar
@@ -53,10 +56,10 @@ CRM_claude_Ai/
     │       ├── AnalitikaScreen.tsx   # Daromad kartasi, diagrammalar, filtr
     │       ├── PortfolioScreen.tsx   # Ishlar galereyasi
     │       ├── DohonScreen.tsx       # 2 ustunli tovarlar seti, savat
-    │       ├── ProfilScreen.tsx      # Foydalanuvchi profili, premium banner, sozlamalar
+    │       ├── ProfilScreen.tsx      # Foydalanuvchi profili, sozlamalar
     │       ├── BookingLinkScreen.tsx # Booking havola boshqaruvi
     │       ├── WorkingHoursScreen.tsx# Hafta kunlari ish vaqtlari
-    │       ├── NotificationsScreen.tsx# Bildirishnomalar va AI rejimi
+    │       ├── NotificationsScreen.tsx# Bildirishnomalar va Web Push diagnostika
     │       ├── SecurityScreen.tsx    # PIN-kod va qurilmalar
     │       ├── LanguageSelectScreen.tsx # O'zbekcha / Ruscha tanlash
     │       └── PublicBookingPreviewModal.tsx # Mijozlar uchun onlayn bron sahifasi

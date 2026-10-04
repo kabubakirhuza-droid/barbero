@@ -1,0 +1,24 @@
+{
+  "name": "Barbero",
+  "short_name": "Barbero",
+  "description": "Barbero - Go'zallik va sartaroshlik ustalari uchun CRM",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FBF8F4",
+  "theme_color": "#FBF8F4",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/assets/icon.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/assets/icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

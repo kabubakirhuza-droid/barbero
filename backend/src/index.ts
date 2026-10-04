@@ -11,26 +11,41 @@ import profileRoutes from './routes/profile';
 import publicBookingRoutes from './routes/publicBooking';
 import salonRoutes from './routes/salons';
 import bookingRequestRoutes from './routes/bookingRequests';
+import pushRoutes from './routes/push';
 
 const app = express();
 
 app.use(cors());
 app.use(express.json());
 
-// API Routes
-app.use('/auth', authRoutes);
-app.use('/services', serviceRoutes);
-app.use('/appointments', appointmentRoutes);
-app.use('/clients', clientRoutes);
-app.use('/analytics', analyticsRoutes);
-app.use('/portfolio', portfolioRoutes);
-app.use('/profile', profileRoutes);
-app.use('/public', publicBookingRoutes);
-app.use('/salons', salonRoutes);
-app.use('/booking-requests', bookingRequestRoutes);
+// Register API Routes under both / and /api for maximum compatibility
+const routes = [
+  { path: '/auth', handler: authRoutes },
+  { path: '/services', handler: serviceRoutes },
+  { path: '/appointments', handler: appointmentRoutes },
+  { path: '/clients', handler: clientRoutes },
+  { path: '/analytics', handler: analyticsRoutes },
+  { path: '/portfolio', handler: portfolioRoutes },
+  { path: '/profile', handler: profileRoutes },
+  { path: '/public', handler: publicBookingRoutes },
+  { path: '/salons', handler: salonRoutes },
+  { path: '/booking-requests', handler: bookingRequestRoutes },
+  { path: '/push', handler: pushRoutes },
+];
+
+routes.forEach(({ path, handler }) => {
+  app.use(path, handler);
+  app.use(`/api${path}`, handler);
+});
+
+import path from 'path';
+
+// Serve Web Application bundle and PWA static assets
+const distPath = path.resolve(__dirname, '../../mobile/dist');
+app.use(express.static(distPath));
 
 // Health check endpoint
-app.get('/health', (req, res) => {
+app.get(['/health', '/api/health'], (req, res) => {
   res.json({
     status: 'ok',
     appName: APP_NAME,
@@ -40,12 +55,26 @@ app.get('/health', (req, res) => {
   });
 });
 
-app.listen(config.port, () => {
-  console.log(`===============================================`);
-  console.log(`🚀 ${APP_NAME} Backend Server running on port ${config.port}`);
-  console.log(`📍 PostGIS Salons 50m Geolocation integration active`);
-  console.log(`✨ Health: http://localhost:${config.port}/health`);
-  console.log(`===============================================`);
+// SPA fallback for frontend client routing (non-API paths)
+app.get('*', (req, res, next) => {
+  if (req.path.startsWith('/api') || req.path.startsWith('/auth') || req.path.startsWith('/appointments')) {
+    return next();
+  }
+  const indexPath = path.join(distPath, 'index.html');
+  res.sendFile(indexPath, (err) => {
+    if (err) next();
+  });
 });
+
+if (process.env.NODE_ENV !== 'test') {
+  app.listen(config.port, () => {
+    console.log(`===============================================`);
+    console.log(`🚀 ${APP_NAME} Backend Server running on port ${config.port}`);
+    console.log(`📍 PostGIS Salons 50m Geolocation integration active`);
+    console.log(`🔔 WebPush VAPID push notification support enabled`);
+    console.log(`✨ Health: http://localhost:${config.port}/health`);
+    console.log(`===============================================`);
+  });
+}
 
 export default app;

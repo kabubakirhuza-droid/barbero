@@ -158,8 +158,7 @@ router.post('/verify', async (req: Request, res: Response): Promise<void> => {
         familiya: '',
         fullName: '',
         username: `user_${userPhone.slice(-4)}`,
-        subscriptionStatus: 'premium',
-        subscriptionUntil: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+        role: 'MASTER',
       };
       db.users.push(user);
     } else if (!user.ism || !user.familiya) {

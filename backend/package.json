@@ -1,7 +1,7 @@
 {
-  "name": "ustoz-backend",
+  "name": "barbero-backend",
   "version": "1.0.0",
-  "description": "Ustoz CRM Backend API with Geolocation Salon Merging",
+  "description": "Barbero CRM Backend API with Geolocation Salon Merging",
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",
@@ -14,7 +14,8 @@
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "jsonwebtoken": "^9.0.2",
-    "pg": "^8.13.1"
+    "pg": "^8.13.1",
+    "web-push": "^3.6.7"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",
@@ -22,6 +23,7 @@
     "@types/jsonwebtoken": "^9.0.7",
     "@types/node": "^22.10.2",
     "@types/pg": "^8.11.10",
+    "@types/web-push": "^3.6.4",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2"
   },

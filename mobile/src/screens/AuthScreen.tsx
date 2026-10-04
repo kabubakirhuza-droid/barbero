@@ -302,7 +302,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
 
   // Create New Salon
   const handleCreateSalon = async () => {
-    const name = newSalonName.trim() || `${ism || 'Usta'} Sartaroshxonasi`;
+    const name = newSalonName.trim() || `${ism || 'Barbero'} Sartaroshxonasi`;
     setLoading(true);
     try {
       await api.createSalon({
@@ -755,7 +755,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                       style={styles.textInputField}
                       value={newSalonName}
                       onChangeText={setNewSalonName}
-                      placeholder={`${ism || 'Usta'} Sartaroshxonasi`}
+                      placeholder={`${ism || 'Barbero'} Sartaroshxonasi`}
                       placeholderTextColor={colors.textMuted}
                     />
                   </View>

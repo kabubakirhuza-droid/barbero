@@ -1,8 +1,8 @@
--- Ustoz PostgreSQL with PostGIS Schema
+-- Barbero PostgreSQL with PostGIS Schema
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "postgis";
 
--- 1. Users table (Barber / Beauty Master)
+-- 1. Users table (Barber / Beauty Master / Client)
 CREATE TABLE IF NOT EXISTS users (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   phone VARCHAR(20) NOT NULL UNIQUE,
@@ -12,8 +12,7 @@ CREATE TABLE IF NOT EXISTS users (
   username VARCHAR(50) DEFAULT 'abubakir' UNIQUE,
   avatar_url TEXT,
   bio TEXT,
-  subscription_status VARCHAR(20) DEFAULT 'premium',
-  subscription_until TIMESTAMP WITH TIME ZONE DEFAULT (NOW() + INTERVAL '30 days'),
+  role VARCHAR(20) DEFAULT 'MASTER',
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -127,4 +126,15 @@ CREATE TABLE IF NOT EXISTS user_settings (
   app_language VARCHAR(10) DEFAULT 'uz',
   security_pin VARCHAR(4),
   biometrics_enabled BOOLEAN DEFAULT FALSE
+);
+
+-- 10. Push Subscriptions table (Web Push / VAPID)
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  endpoint TEXT NOT NULL UNIQUE,
+  p256dh TEXT NOT NULL,
+  auth TEXT NOT NULL,
+  device VARCHAR(100),
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );

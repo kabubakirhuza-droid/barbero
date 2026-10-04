@@ -14,7 +14,7 @@ async function check() {
   
   console.log('Returned actual JS bundle! Total size:', text.length, 'bytes');
   console.log('Bundle contains React:', text.includes('React'));
-  console.log('Bundle contains Planr components:', text.includes('JadvalScreen'));
+  console.log('Bundle contains Barbero components:', text.includes('JadvalScreen'));
 }
 
 check().catch(console.error);

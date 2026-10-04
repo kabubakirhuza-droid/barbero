@@ -11,13 +11,10 @@ import {
 import { confirmAction } from '../utils/alerts';
 import {
   Copy,
-  Crown,
   ChevronRight,
   Scissors,
   Link as LinkIcon,
   CalendarCheck,
-  CreditCard,
-  ShoppingBag,
   Clock,
   Bell,
   Video,
@@ -28,7 +25,6 @@ import {
   HelpCircle,
   FileCheck,
   LogOut,
-  Sparkles,
 } from 'lucide-react-native';
 import { colors, COLOR_PRIMARY } from '../theme/theme';
 import { useTranslation } from '../i18n/LanguageContext';
@@ -39,8 +35,6 @@ import { LanguageSelectScreen } from './LanguageSelectScreen';
 import { SecurityScreen } from './SecurityScreen';
 import { MySalonScreen } from './MySalonScreen';
 import { BookingRequestsScreen } from './BookingRequestsScreen';
-import { MySubscriptionScreen } from './MySubscriptionScreen';
-import { BuySubscriptionScreen } from './BuySubscriptionScreen';
 import { PublicBookingPreviewModal } from './PublicBookingPreviewModal';
 import { HelpModal } from './HelpModal';
 import { LegalDocsModal } from './LegalDocsModal';
@@ -60,9 +54,7 @@ type SubScreen =
   | 'language'
   | 'security'
   | 'mySalon'
-  | 'bookingRequests'
-  | 'mySubscription'
-  | 'buySubscription';
+  | 'bookingRequests';
 
 export const ProfilScreen: React.FC<ProfilScreenProps> = ({ onLogout, onOpenAddService }) => {
   const { t, language } = useTranslation();
@@ -71,26 +63,29 @@ export const ProfilScreen: React.FC<ProfilScreenProps> = ({ onLogout, onOpenAddS
   const [isHelpVisible, setIsHelpVisible] = useState(false);
   const [isLegalDocsVisible, setIsLegalDocsVisible] = useState(false);
   const [userData, setUserData] = useState<{ ism: string; familiya: string; phone: string }>({
-    ism: 'Bobur',
+    ism: 'Abubakir',
     familiya: 'Aliyev',
     phone: '+998 90 033 51 02',
   });
 
   useEffect(() => {
-    api.getProfile().then((res) => {
-      if (res?.user) {
-        setUserData({
-          ism: res.user.ism || 'Bobur',
-          familiya: res.user.familiya || 'Aliyev',
-          phone: res.user.phone || '+998 90 033 51 02',
-        });
-      }
-    }).catch(() => {});
+    api
+      .getProfile()
+      .then((res) => {
+        if (res?.user) {
+          setUserData({
+            ism: res.user.ism || 'Abubakir',
+            familiya: res.user.familiya || 'Aliyev',
+            phone: res.user.phone || '+998 90 033 51 02',
+          });
+        }
+      })
+      .catch(() => {});
   }, []);
 
   const fullName = `${userData.ism} ${userData.familiya}`.trim();
-  const initial = (userData.ism[0] || 'U').toUpperCase();
-  const username = userData.ism.toLowerCase() || 'bobur';
+  const initial = (userData.ism[0] || 'A').toUpperCase();
+  const username = userData.ism.toLowerCase() || 'abubakir';
   const bookingUrl = `${APP_BASE_URL}/b/${username}`;
 
   const handleCopyLink = () => {
@@ -99,13 +94,13 @@ export const ProfilScreen: React.FC<ProfilScreenProps> = ({ onLogout, onOpenAddS
         navigator.clipboard.writeText(bookingUrl);
       }
     } catch (e) {}
-    Alert.alert("Nusxalandi!", bookingUrl);
+    Alert.alert(t('copySuccess'), bookingUrl);
   };
 
   const handleLogoutPress = () => {
     confirmAction(
-      "Hisobdan chiqasizmi?",
-      "Haqiqatan ham hisobdan chiqmoqchimisiz?",
+      'Hisobdan chiqasizmi?',
+      'Haqiqatan ham hisobdan chiqmoqchimisiz?',
       async () => {
         api.clearToken();
         onLogout();
@@ -118,19 +113,6 @@ export const ProfilScreen: React.FC<ProfilScreenProps> = ({ onLogout, onOpenAddS
   // Render subscreen if active
   if (activeSubScreen === 'bookingRequests') {
     return <BookingRequestsScreen onBack={() => setActiveSubScreen(null)} />;
-  }
-
-  if (activeSubScreen === 'mySubscription') {
-    return (
-      <MySubscriptionScreen
-        onBack={() => setActiveSubScreen(null)}
-        onOpenBuy={() => setActiveSubScreen('buySubscription')}
-      />
-    );
-  }
-
-  if (activeSubScreen === 'buySubscription') {
-    return <BuySubscriptionScreen onBack={() => setActiveSubScreen(null)} />;
   }
 
   if (activeSubScreen === 'mySalon') {
@@ -197,28 +179,7 @@ export const ProfilScreen: React.FC<ProfilScreenProps> = ({ onLogout, onOpenAddS
           </View>
         </View>
 
-        {/* 2. Orange → Yellow Gradient Premium Banner */}
-        <View style={styles.premiumBanner}>
-          <View style={styles.premiumLeft}>
-            <View style={styles.crownWrap}>
-              <Crown size={22} color="#FFFFFF" strokeWidth={2.4} />
-            </View>
-            <View style={styles.premiumTexts}>
-              <Text style={styles.premiumTitle}>{t('premiumBannerTitle')}</Text>
-              <Text style={styles.premiumValid}>{t('premiumValidUntil')}</Text>
-            </View>
-          </View>
-          <TouchableOpacity
-            style={styles.premiumBtn}
-            onPress={() => setActiveSubScreen('mySubscription')}
-            activeOpacity={0.8}
-          >
-            <Sparkles size={14} color={COLOR_PRIMARY} />
-            <Text style={styles.premiumBtnText}>Boshqarish</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* 3. Group: XIZMATLAR */}
+        {/* 2. Group: XIZMATLAR */}
         <View style={styles.section}>
           <Text style={styles.sectionHeaderTitle}>{t('groupServices')}</Text>
           <View style={styles.menuGroupCard}>
@@ -267,40 +228,6 @@ export const ProfilScreen: React.FC<ProfilScreenProps> = ({ onLogout, onOpenAddS
                   <CalendarCheck size={20} color={COLOR_PRIMARY} />
                 </View>
                 <Text style={styles.menuItemLabel}>{t('bookingRequests')}</Text>
-              </View>
-              <ChevronRight size={18} color={colors.textMuted} />
-            </TouchableOpacity>
-
-            <View style={styles.menuDivider} />
-
-            {/* Obunalarim */}
-            <TouchableOpacity
-              style={styles.menuItem}
-              onPress={() => setActiveSubScreen('mySubscription')}
-              activeOpacity={0.7}
-            >
-              <View style={styles.menuItemLeft}>
-                <View style={styles.menuIconWrap}>
-                  <CreditCard size={20} color={COLOR_PRIMARY} />
-                </View>
-                <Text style={styles.menuItemLabel}>{t('mySubscriptions')}</Text>
-              </View>
-              <ChevronRight size={18} color={colors.textMuted} />
-            </TouchableOpacity>
-
-            <View style={styles.menuDivider} />
-
-            {/* Obuna sotib olish */}
-            <TouchableOpacity
-              style={styles.menuItem}
-              onPress={() => setActiveSubScreen('buySubscription')}
-              activeOpacity={0.7}
-            >
-              <View style={styles.menuItemLeft}>
-                <View style={styles.menuIconWrap}>
-                  <ShoppingBag size={20} color={COLOR_PRIMARY} />
-                </View>
-                <Text style={styles.menuItemLabel}>{t('buySubscription')}</Text>
               </View>
               <ChevronRight size={18} color={colors.textMuted} />
             </TouchableOpacity>
@@ -373,7 +300,7 @@ export const ProfilScreen: React.FC<ProfilScreenProps> = ({ onLogout, onOpenAddS
           </View>
         </View>
 
-        {/* 4. Group: SOZLAMALAR */}
+        {/* 3. Group: SOZLAMALAR */}
         <View style={styles.section}>
           <Text style={styles.sectionHeaderTitle}>{t('groupSettings')}</Text>
           <View style={styles.menuGroupCard}>
@@ -470,7 +397,7 @@ export const ProfilScreen: React.FC<ProfilScreenProps> = ({ onLogout, onOpenAddS
           </View>
         </View>
 
-        {/* 5. Chiqish (Red Dangerous Button: light pink #FCEBEB, red text, NO black border, radius 20) */}
+        {/* 4. Chiqish */}
         <TouchableOpacity
           style={styles.logoutButton}
           onPress={handleLogoutPress}
@@ -574,59 +501,6 @@ const styles = StyleSheet.create({
   linkUrlText: {
     fontSize: 13,
     fontWeight: '700',
-    color: colors.primary,
-  },
-  premiumBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#F97316',
-    borderRadius: 20,
-    padding: 16,
-    shadowColor: '#F97316',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3,
-    shadowRadius: 14,
-    elevation: 6,
-  },
-  premiumLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  crownWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(255, 255, 255, 0.25)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  premiumTexts: {
-    gap: 2,
-  },
-  premiumTitle: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#FFFFFF',
-  },
-  premiumValid: {
-    fontSize: 12,
-    color: 'rgba(255, 255, 255, 0.9)',
-    fontWeight: '500',
-  },
-  premiumBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 14,
-  },
-  premiumBtnText: {
-    fontSize: 12,
-    fontWeight: '800',
     color: colors.primary,
   },
   section: {

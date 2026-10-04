@@ -9,6 +9,14 @@
     "start": "cd mobile && npm start",
     "build:mobile": "cd mobile && npm run build",
     "build:backend": "cd backend && npm run build",
-    "build": "cd mobile && npm run build"
+    "build": "cd backend && npm install && npm run build && cd ../mobile && npm install && npm run build && cd .. && node -e \"const fs=require('fs'); try{fs.copyFileSync('mobile/web/sw.js','mobile/dist/sw.js'); fs.copyFileSync('mobile/web/manifest.json','mobile/dist/manifest.json');}catch(e){}\""
+  },
+  "dependencies": {
+    "@vercel/node": "^5.1.8",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "jsonwebtoken": "^9.0.2",
+    "web-push": "^3.6.7"
   }
 }

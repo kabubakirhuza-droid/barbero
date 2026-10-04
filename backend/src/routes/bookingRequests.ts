@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { db, BookingRequest, Appointment } from '../db';
+import { pushService } from '../pushService';
 
 const router = Router();
 
@@ -17,7 +18,7 @@ router.get('/', (req: Request, res: Response): void => {
 });
 
 // POST /booking-requests - Client submits request from public booking page
-router.post('/', (req: Request, res: Response): void => {
+router.post('/', async (req: Request, res: Response): Promise<void> => {
   const { masterId, clientName, clientPhone, serviceId, date, time } = req.body;
 
   if (!clientName || !clientPhone || !serviceId || !date || !time) {
@@ -25,11 +26,12 @@ router.post('/', (req: Request, res: Response): void => {
     return;
   }
 
+  const targetMasterId = masterId || 'u-1';
   const service = db.services.find((s) => s.id === serviceId) || db.services[0];
 
   const newRequest: BookingRequest = {
     id: `req-${Date.now()}`,
-    masterId: masterId || 'u-1',
+    masterId: targetMasterId,
     clientName: clientName.trim(),
     clientPhone: clientPhone.trim(),
     serviceId: service.id,
@@ -42,6 +44,22 @@ router.post('/', (req: Request, res: Response): void => {
   };
 
   db.bookingRequests.unshift(newRequest);
+
+  // Send real Push Notification to master
+  try {
+    await pushService.sendNotificationToUser(targetMasterId, {
+      title: `Yangi so'rov: ${clientName.trim()}`,
+      body: `${service.name} • ${date}, soat ${time}`,
+      tag: `booking-request-${newRequest.id}`,
+      data: {
+        screen: 'bookingRequests',
+        url: '/',
+        requestId: newRequest.id,
+      },
+    });
+  } catch (pushErr) {
+    console.error('[BookingRequests] Push notification error:', pushErr);
+  }
 
   res.status(201).json({
     success: true,

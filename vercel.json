@@ -1,10 +1,62 @@
 {
   "version": 2,
-  "buildCommand": "cd mobile && npm install && npm run build",
+  "buildCommand": "npm run build",
   "outputDirectory": "mobile/dist",
   "rewrites": [
     {
-      "source": "/(.*)",
+      "source": "/api/(.*)",
+      "destination": "/api"
+    },
+    {
+      "source": "/health",
+      "destination": "/api"
+    },
+    {
+      "source": "/auth/(.*)",
+      "destination": "/api"
+    },
+    {
+      "source": "/push/(.*)",
+      "destination": "/api"
+    },
+    {
+      "source": "/appointments/(.*)",
+      "destination": "/api"
+    },
+    {
+      "source": "/services/(.*)",
+      "destination": "/api"
+    },
+    {
+      "source": "/clients/(.*)",
+      "destination": "/api"
+    },
+    {
+      "source": "/analytics",
+      "destination": "/api"
+    },
+    {
+      "source": "/portfolio/(.*)",
+      "destination": "/api"
+    },
+    {
+      "source": "/profile/(.*)",
+      "destination": "/api"
+    },
+    {
+      "source": "/public/(.*)",
+      "destination": "/api"
+    },
+    {
+      "source": "/salons/(.*)",
+      "destination": "/api"
+    },
+    {
+      "source": "/booking-requests/(.*)",
+      "destination": "/api"
+    },
+    {
+      "source": "/((?!api/|_expo/|favicon.ico|manifest.json|sw.js).*)",
       "destination": "/index.html"
     }
   ]

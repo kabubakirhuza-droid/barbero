@@ -19,7 +19,7 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [language, setLanguageState] = useState<Language>('uz');
 
   useEffect(() => {
-    AsyncStorage.getItem('planr_lang').then((saved) => {
+    AsyncStorage.getItem('barbero_lang').then((saved) => {
       if (saved === 'uz' || saved === 'ru') {
         setLanguageState(saved);
       }
@@ -28,7 +28,7 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const setLanguage = (lang: Language) => {
     setLanguageState(lang);
-    AsyncStorage.setItem('planr_lang', lang);
+    AsyncStorage.setItem('barbero_lang', lang);
   };
 
   const t = (key: TranslationKey, fallback?: string): string => {

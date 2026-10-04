@@ -8,7 +8,7 @@ import {
   Platform,
   Modal,
 } from 'react-native';
-import { ChevronLeft, FileText, Shield, Scale } from 'lucide-react-native';
+import { ChevronLeft, Scale, Shield, UserCheck } from 'lucide-react-native';
 import { colors, COLOR_PRIMARY } from '../theme/theme';
 import { useTranslation } from '../i18n/LanguageContext';
 
@@ -17,11 +17,11 @@ interface LegalDocsModalProps {
   onClose: () => void;
 }
 
-type TabType = 'terms' | 'privacy' | 'offer';
+type TabType = 'offer' | 'privacy' | 'client_privacy';
 
 export const LegalDocsModal: React.FC<LegalDocsModalProps> = ({ visible, onClose }) => {
   const { language } = useTranslation();
-  const [activeTab, setActiveTab] = useState<TabType>('terms');
+  const [activeTab, setActiveTab] = useState<TabType>('offer');
 
   return (
     <Modal visible={visible} animationType="slide" transparent={false} onRequestClose={onClose}>
@@ -37,16 +37,16 @@ export const LegalDocsModal: React.FC<LegalDocsModalProps> = ({ visible, onClose
           <View style={{ width: 40 }} />
         </View>
 
-        {/* Tab switcher */}
+        {/* Tab switcher: 3 documents */}
         <View style={styles.tabsContainer}>
           <TouchableOpacity
-            style={[styles.tabBtn, activeTab === 'terms' && styles.tabBtnActive]}
-            onPress={() => setActiveTab('terms')}
+            style={[styles.tabBtn, activeTab === 'offer' && styles.tabBtnActive]}
+            onPress={() => setActiveTab('offer')}
             activeOpacity={0.7}
           >
-            <FileText size={16} color={activeTab === 'terms' ? COLOR_PRIMARY : colors.textSecondary} />
-            <Text style={[styles.tabText, activeTab === 'terms' && styles.tabTextActive]}>
-              {language === 'uz' ? 'Shartlar' : 'Условия'}
+            <Scale size={15} color={activeTab === 'offer' ? COLOR_PRIMARY : colors.textSecondary} />
+            <Text style={[styles.tabText, activeTab === 'offer' && styles.tabTextActive]}>
+              {language === 'uz' ? 'Ommaviy oferta' : 'Оферта'}
             </Text>
           </TouchableOpacity>
 
@@ -55,20 +55,20 @@ export const LegalDocsModal: React.FC<LegalDocsModalProps> = ({ visible, onClose
             onPress={() => setActiveTab('privacy')}
             activeOpacity={0.7}
           >
-            <Shield size={16} color={activeTab === 'privacy' ? COLOR_PRIMARY : colors.textSecondary} />
+            <Shield size={15} color={activeTab === 'privacy' ? COLOR_PRIMARY : colors.textSecondary} />
             <Text style={[styles.tabText, activeTab === 'privacy' && styles.tabTextActive]}>
               {language === 'uz' ? 'Maxfiylik' : 'Конфиденциальность'}
             </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.tabBtn, activeTab === 'offer' && styles.tabBtnActive]}
-            onPress={() => setActiveTab('offer')}
+            style={[styles.tabBtn, activeTab === 'client_privacy' && styles.tabBtnActive]}
+            onPress={() => setActiveTab('client_privacy')}
             activeOpacity={0.7}
           >
-            <Scale size={16} color={activeTab === 'offer' ? COLOR_PRIMARY : colors.textSecondary} />
-            <Text style={[styles.tabText, activeTab === 'offer' && styles.tabTextActive]}>
-              {language === 'uz' ? 'Oferta' : 'Оферта'}
+            <UserCheck size={15} color={activeTab === 'client_privacy' ? COLOR_PRIMARY : colors.textSecondary} />
+            <Text style={[styles.tabText, activeTab === 'client_privacy' && styles.tabTextActive]}>
+              {language === 'uz' ? 'Mijozlar maxfiyligi' : 'Для клиентов'}
             </Text>
           </TouchableOpacity>
         </View>
@@ -76,12 +76,12 @@ export const LegalDocsModal: React.FC<LegalDocsModalProps> = ({ visible, onClose
         {/* Content Body */}
         <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           <View style={styles.docCard}>
-            {activeTab === 'terms' && (
+            {activeTab === 'offer' && (
               <>
                 <Text style={styles.docTitle}>
                   {language === 'uz'
-                    ? 'BARBERO ilovasidan foydalanish shartlari'
-                    : 'Условия использования сервиса BARBERO'}
+                    ? 'BARBERO platformasi ommaviy oferta shartnomasi'
+                    : 'Публичная оферта сервиса BARBERO'}
                 </Text>
                 <Text style={styles.updateDate}>
                   {language === 'uz' ? 'Oxirgi yangilanish: 2026-yil 1-oktabr' : 'Последнее обновление: 1 октября 2026 г.'}
@@ -89,17 +89,22 @@ export const LegalDocsModal: React.FC<LegalDocsModalProps> = ({ visible, onClose
 
                 <Text style={styles.sectionHeading}>1. Umumiy qoidalar</Text>
                 <Text style={styles.paragraph}>
-                  Ushbu Foydalanish shartlari «BARBERO» ilovasi va xizmatlaridan foydalanish qoidalarini belgilaydi. Ilovadan ro‘yxatdan o‘tish orqali siz mazkur shartlarga to‘liq rozilik bildirasiz.
+                  Ushbu Ommaviy oferta «Barbero» xizmatidan foydalanish shartlarini belgilaydi. Ilovada ro‘yxatdan o‘tish orqali foydalanuvchi mazkur shartlarga to‘liq va shartsiz rozilik bildiradi.
                 </Text>
 
-                <Text style={styles.sectionHeading}>2. Usta va mijoz majburiyatlari</Text>
+                <Text style={styles.sectionHeading}>2. Xizmat maqsadi va bepul foydalanish</Text>
                 <Text style={styles.paragraph}>
-                  Xizmat ko‘rsatuvchi usta o‘z xizmatlari narxlari, ish jadvali va manzilining to‘g‘riligi uchun javobgardir. Mijoz esa qabul vaqtiga o‘z vaqtida kelish yoki yozuvni oldindan bekor qilish majburiyatini oladi.
+                  Barbero platformasi sartaroshlar va go‘zallik ustalari uchun qabul jadvalini yuritish, mijozlar navbatini tartibga solish va onlayn bronlash tizimini taqdim etadi. Hozirgi bosqichda tizimning barcha imkoniyatlari ustalarga bepul taqdim etiladi.
                 </Text>
 
-                <Text style={styles.sectionHeading}>3. To‘lovlar va obuna</Text>
+                <Text style={styles.sectionHeading}>3. Usta va mijoz majburiyatlari</Text>
                 <Text style={styles.paragraph}>
-                  BARBERO Pro tariflari usta tomonidan tanlangan muddat uchun oldindan to‘lanadi. To‘lovlar Click, Payme va Uzum Bank orqali xavfsiz amalga oshiriladi.
+                  Usta o‘z xizmatlari narxlari, ish jadvali va manzilining to‘g‘riligi uchun javobgardir. Mijoz esa qabul vaqtiga o‘z vaqtida kelish yoki yozuvni oldindan bekor qilish majburiyatini oladi.
+                </Text>
+
+                <Text style={styles.sectionHeading}>4. Tomonlarning javobgarligi</Text>
+                <Text style={styles.paragraph}>
+                  Platforma xizmat ko‘rsatuvchi usta va mijoz o‘rtasidagi to‘g‘ridan-to‘g‘ri shaxsiy kelishuvlar, xizmat ko‘rsatish sifati yoki tomonlarning kelishuvga rioya qilmasligi uchun moddiy javobgar bo‘lmaydi.
                 </Text>
               </>
             )}
@@ -117,45 +122,40 @@ export const LegalDocsModal: React.FC<LegalDocsModalProps> = ({ visible, onClose
 
                 <Text style={styles.sectionHeading}>1. To‘planadigan ma’lumotlar</Text>
                 <Text style={styles.paragraph}>
-                  Biz foydalanuvchilarning ismi, telefon raqami, manzil/lokatsiya ma’lumotlari va xizmatlar bo‘yicha yozuvlarni xizmat sifatini oshirish maqsadida saqlaymiz.
+                  Biz ustalarning ismi, telefon raqami, xizmatlar ro‘yxati, ish joyi geolokatsiyasi va qabul jadvallarini faqat xizmatni ko‘rsatish maqsadida saqlaymiz.
                 </Text>
 
-                <Text style={styles.sectionHeading}>2. Ma’lumotlarni himoya qilish</Text>
+                <Text style={styles.sectionHeading}>2. Ma’lumotlarni saqlash va himoyalash</Text>
                 <Text style={styles.paragraph}>
-                  Barcha ma’lumotlar shifrlangan holda uzatiladi (SSL/TLS) va uchinchi shaxslarga tijoriy maqsadlarda sotilmaydi yoki berilmaydi.
+                  Barcha ma’lumotlar shifrlangan protokollar (HTTPS/TLS) orqali uzatiladi va uchinchi shaxslarga tijoriy maqsadlarda sotilmaydi yoki berilmaydi.
                 </Text>
 
                 <Text style={styles.sectionHeading}>3. Foydalanuvchi huquqlari</Text>
                 <Text style={styles.paragraph}>
-                  Foydalanuvchi o‘z shaxsiy ma’lumotlarini ko‘rish, tahrirlash yoki hisobini butunlay o‘chirish huquqiga ega.
+                  Foydalanuvchi istalgan vaqtda o‘z hisobini tozalash, ma’lumotlarini tahrirlash yoki o‘chirish huquqiga ega.
                 </Text>
               </>
             )}
 
-            {activeTab === 'offer' && (
+            {activeTab === 'client_privacy' && (
               <>
                 <Text style={styles.docTitle}>
                   {language === 'uz'
-                    ? 'Ommaviy oferta shartnomasi'
-                    : 'Публичная оферта на оказание услуг'}
+                    ? 'Mijozlar uchun maxfiylik siyosati'
+                    : 'Политика конфиденциальности для клиентов'}
                 </Text>
                 <Text style={styles.updateDate}>
                   {language === 'uz' ? 'Oxirgi yangilanish: 2026-yil 1-oktabr' : 'Последнее обновление: 1 октября 2026 г.'}
                 </Text>
 
-                <Text style={styles.sectionHeading}>1. Shartnoma predmeti</Text>
+                <Text style={styles.sectionHeading}>1. Mijoz ma’lumotlaridan foydalanish</Text>
                 <Text style={styles.paragraph}>
-                  BARBERO platformasi ustalarga mijozlar bazasini boshqarish, jadval yuritish va onlayn bronlash tizimini taqdim etadi.
+                  Onlayn bron qilish orqali yozilgan mijozning ismi va telefon raqami faqat tanlangan ustaga qabul vaqtini tasdiqlash va eslatma yuborish uchun taqdim etiladi.
                 </Text>
 
-                <Text style={styles.sectionHeading}>2. Xizmat haqi va hisob-kitob</Text>
+                <Text style={styles.sectionHeading}>2. Bildirishnomalar va xavfsizlik</Text>
                 <Text style={styles.paragraph}>
-                  Xizmat ko‘rsatish narxlari ilovaning «Obunalar» bo‘limida ko‘rsatilgan tariflar asosida hisoblanadi.
-                </Text>
-
-                <Text style={styles.sectionHeading}>3. Fors-major holatlari</Text>
-                <Text style={styles.paragraph}>
-                  Tomonlar yengib bo‘lmas kuch holatlari yuzaga kelganda majburiyatlarni bajarmaslik javobgarligidan ozod etiladi.
+                  Mijozga qabul holati va eslatmalar faqat uning roziligi bilan SMS yoki Telegram orqali yuboriladi. Hech qanday spam yuborilmaydi.
                 </Text>
               </>
             )}
@@ -213,7 +213,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
+    gap: 4,
     paddingVertical: 10,
     borderRadius: 10,
   },
@@ -221,7 +221,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primaryLight,
   },
   tabText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
     color: colors.textSecondary,
   },

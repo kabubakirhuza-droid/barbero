@@ -32,7 +32,7 @@ export const colors = {
   textMuted: '#9E968B',
   textLight: '#FAF7F2',
 
-  // Premium Banner
+  // Gradients
   gradientOrange: '#F97316',
   gradientYellow: '#EAB308',
 

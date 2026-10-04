@@ -12,8 +12,6 @@ export interface User {
   username: string;
   avatarUrl?: string;
   bio?: string;
-  subscriptionStatus: 'free' | 'premium';
-  subscriptionUntil: string;
 }
 
 export interface Salon {
@@ -63,6 +61,7 @@ export interface Client {
 
 export interface Appointment {
   id: string;
+  userId?: string;
   clientId: string;
   clientName: string;
   clientPhone: string;
@@ -99,6 +98,8 @@ export interface PortfolioPhoto {
 
 export interface AnalyticsData {
   period: string;
+  from?: string;
+  to?: string;
   revenue: {
     total: number;
     formatted: string;
@@ -112,10 +113,13 @@ export interface AnalyticsData {
     clients: {
       total: number;
       growth: string;
+      newClients?: number;
     };
     occupancy: {
       percent: string;
       ratio: string;
+      bookedDays?: number;
+      workingDays?: number;
     };
   };
   dynamics: {
@@ -123,9 +127,11 @@ export interface AnalyticsData {
     subtitle: string;
     badge: string;
     chart: Array<{
-      month: string;
+      label?: string;
+      month?: string;
       amount: number;
       heightPercent: number;
+      isCurrent?: boolean;
     }>;
   };
 }

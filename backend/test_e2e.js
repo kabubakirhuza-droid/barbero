@@ -1,8 +1,9 @@
-// Comprehensive E2E test script for Usta Backend API
+// Comprehensive E2E test script for Barbero Backend API
 const BASE_URL = 'http://127.0.0.1:5000';
+const jwt = require('jsonwebtoken');
 
 async function runTests() {
-  console.log('--- 🧪 STARTING USTA BACKEND E2E TESTS ---');
+  console.log('--- 🧪 STARTING BARBERO BACKEND E2E TESTS ---');
   let passed = 0;
   let failed = 0;
 
@@ -25,7 +26,6 @@ async function runTests() {
   });
 
   // 2. Auth - Send Code
-  let testCode = '';
   let requestId = '';
   await test('POST /auth/send-code', async () => {
     const res = await fetch(`${BASE_URL}/auth/send-code`, {
@@ -35,12 +35,10 @@ async function runTests() {
     });
     const data = await res.json();
     if (!data.success && !data.requestId) throw new Error('Failed to send code');
-    testCode = data.testCode || '123456';
     requestId = data.requestId;
   });
 
   // 3. Auth - Telegram Gateway Real Verification (invalid code check)
-  let accessToken = '';
   await test('POST /auth/verify - rejects invalid code via Telegram Gateway', async () => {
     const res = await fetch(`${BASE_URL}/auth/verify`, {
       method: 'POST',
@@ -53,7 +51,6 @@ async function runTests() {
     });
     const data = await res.json();
     if (res.status === 400 && data.error) {
-      // Expected: Telegram Gateway verified that 999999 is invalid or session rate limit applied
       console.log(`    ℹ️ Expected rejection: "${data.error}"`);
     } else {
       throw new Error('Expected 400 rejection from Telegram Gateway on wrong code');
@@ -61,8 +58,11 @@ async function runTests() {
   });
 
   // Generate valid test JWT token for remaining protected endpoints
-  const jwt = require('jsonwebtoken');
-  accessToken = jwt.sign({ userId: 'u-1', phone: '+998900335102' }, 'usta_super_jwt_secret_key_2026', { expiresIn: '1h' });
+  const accessToken = jwt.sign(
+    { userId: 'u-1', phone: '+998900335102' },
+    process.env.JWT_SECRET || 'barbero_super_jwt_secret_key_2026',
+    { expiresIn: '1h' }
+  );
 
   // 4. Auth - Me
   await test('GET /auth/me', async () => {
@@ -100,7 +100,7 @@ async function runTests() {
     createdServiceId = data.service.id;
   });
 
-  // 7. Appointments - List for today
+  // 7. Appointments - List
   await test('GET /appointments', async () => {
     const res = await fetch(`${BASE_URL}/appointments`);
     const data = await res.json();
@@ -120,7 +120,7 @@ async function runTests() {
         serviceName: 'Kreativ soqol tekislash',
         servicePrice: 45000,
         badgeColor: '#059669',
-        date: '2026-09-29',
+        date: '2026-10-03',
         startTime: '16:00',
         duration: 30,
       }),
@@ -154,17 +154,121 @@ async function runTests() {
     }
   });
 
-  // 11. Analytics - Period Month
-  await test('GET /analytics?period=oy', async () => {
-    const res = await fetch(`${BASE_URL}/analytics?period=oy`);
+  // 11. Analytics - Period Hafta
+  await test('GET /analytics?period=hafta', async () => {
+    const res = await fetch(`${BASE_URL}/analytics?period=hafta`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
     const data = await res.json();
     if (!data.revenue || !data.metrics || !data.dynamics?.chart) {
-      throw new Error('Analytics invalid structure');
+      throw new Error('Analytics invalid structure for hafta');
+    }
+    if (data.period !== 'hafta') throw new Error('Incorrect period in response');
+  });
+
+  // 12. Analytics - Period Oy
+  await test('GET /analytics?period=oy', async () => {
+    const res = await fetch(`${BASE_URL}/analytics?period=oy`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    const data = await res.json();
+    if (!data.revenue?.amountFormatted || !data.metrics?.clients?.countFormatted) {
+      throw new Error('Analytics missing formatted fields');
+    }
+    if (typeof data.metrics.occupancy?.percent !== 'number') {
+      throw new Error('Occupancy percent missing');
     }
   });
 
+  // 13. Analytics - Period Yil
+  await test('GET /analytics?period=yil', async () => {
+    const res = await fetch(`${BASE_URL}/analytics?period=yil`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    const data = await res.json();
+    if (data.period !== 'yil' || data.dynamics.group !== 'month') {
+      throw new Error('Yearly analytics grouping incorrect');
+    }
+  });
 
-  // 13. Portfolio - Photos & Like
+  // 14. Analytics - Custom range valid & invalid
+  await test('GET /analytics with custom range (valid & invalid)', async () => {
+    // Valid custom range
+    const validRes = await fetch(`${BASE_URL}/analytics?from=2026-09-01&to=2026-10-03`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    const validData = await validRes.json();
+    if (!validData.revenue) throw new Error('Valid range failed');
+
+    // Invalid custom range: from > to
+    const invalidRes = await fetch(`${BASE_URL}/analytics?from=2026-10-10&to=2026-10-01`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    const invalidData = await invalidRes.json();
+    if (invalidRes.status !== 400 || !invalidData.error) {
+      throw new Error('Expected 400 validation error for from > to');
+    }
+  });
+
+  // 15. Web Push - VAPID Public Key
+  await test('GET /push/vapid-public-key', async () => {
+    const res = await fetch(`${BASE_URL}/push/vapid-public-key`);
+    const data = await res.json();
+    if (!data.publicKey || typeof data.publicKey !== 'string') {
+      throw new Error('VAPID public key missing or invalid');
+    }
+  });
+
+  // 16. Web Push - Subscribe & Status & Test & Unsubscribe
+  await test('Web Push: Subscribe, Status, Test, Unsubscribe', async () => {
+    const testSubscription = {
+      endpoint: 'https://fcm.googleapis.com/fcm/send/test-token-12345',
+      keys: {
+        p256dh: 'BNcRdreALRFXTkOOUHK1EtK2wtaz5Ry4YfYCA_0QTpQtUbVlUls0VJXg7A8u-Ts1XbjhazAkj7I99e8QcYP7DkM',
+        auth: 'tBHItJI5svbpez7KI4CCXg',
+      },
+    };
+
+    // Subscribe
+    const subRes = await fetch(`${BASE_URL}/push/subscribe`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({
+        subscription: testSubscription,
+        device: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0',
+      }),
+    });
+    const subData = await subRes.json();
+    if (!subData.success) throw new Error(`Subscribe failed: ${JSON.stringify(subData)}`);
+
+    // Status
+    const statusRes = await fetch(`${BASE_URL}/push/status`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    const statusData = await statusRes.json();
+    if (!statusData.isSubscribed || statusData.subscriptionsCount < 1) {
+      throw new Error('Push status indicates not subscribed');
+    }
+
+    // Unsubscribe
+    const unsubRes = await fetch(`${BASE_URL}/push/unsubscribe`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({
+        endpoint: testSubscription.endpoint,
+      }),
+    });
+    const unsubData = await unsubRes.json();
+    if (!unsubData.success) throw new Error('Unsubscribe failed');
+  });
+
+  // 17. Portfolio - Photos & Like
   await test('GET & POST /portfolio', async () => {
     const res = await fetch(`${BASE_URL}/portfolio`);
     const data = await res.json();
@@ -176,11 +280,11 @@ async function runTests() {
     if (!likeData.success) throw new Error('Failed liking photo');
   });
 
-  // 14. Profile & Working Hours
+  // 18. Profile & Working Hours
   await test('GET /profile & /profile/working-hours', async () => {
     const pRes = await fetch(`${BASE_URL}/profile`);
     const pData = await pRes.json();
-    if (!pData.user || !pData.subscription) throw new Error('Profile invalid');
+    if (!pData.user) throw new Error('Profile user missing');
 
     const whRes = await fetch(`${BASE_URL}/profile/working-hours`);
     const whData = await whRes.json();
@@ -189,13 +293,13 @@ async function runTests() {
     }
   });
 
-  // 15. Public Booking - planr.uz/b/abubakir
+  // 19. Public Booking - /public/b/abubakir
   await test('Public Booking: GET & POST /public/b/abubakir', async () => {
     const infoRes = await fetch(`${BASE_URL}/public/b/abubakir`);
     const infoData = await infoRes.json();
     if (!infoData.master || !infoData.services) throw new Error('Public master info missing');
 
-    const slotsRes = await fetch(`${BASE_URL}/public/b/abubakir/available-slots?date=2026-09-29`);
+    const slotsRes = await fetch(`${BASE_URL}/public/b/abubakir/available-slots?date=2026-10-03`);
     const slotsData = await slotsRes.json();
     if (!Array.isArray(slotsData.slots)) throw new Error('Slots not array');
 
@@ -208,7 +312,7 @@ async function runTests() {
         clientName: 'Nodirbek',
         clientPhone: '+998909990011',
         serviceId: infoData.services[0].id,
-        date: '2026-09-29',
+        date: '2026-10-03',
         startTime: availableSlot,
       }),
     });
@@ -216,9 +320,9 @@ async function runTests() {
     if (!bookData.success || !bookData.appointment) throw new Error(`Public booking failed: ${JSON.stringify(bookData)}`);
   });
 
-  // 16. Booking Requests: POST, GET, ACCEPT
+  // 20. Booking Requests: POST, GET, ACCEPT (triggers push to master)
   await test('Booking Requests: submit, list, accept', async () => {
-    // 16.1 Client submits booking request from public link
+    // 20.1 Client submits booking request from public link
     const postRes = await fetch(`${BASE_URL}/booking-requests`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -227,7 +331,7 @@ async function runTests() {
         clientName: 'Azamat Qosimov',
         clientPhone: '+998901112233',
         serviceId: 'srv-1',
-        date: '2026-09-29',
+        date: '2026-10-03',
         time: '16:30',
       }),
     });
@@ -235,14 +339,14 @@ async function runTests() {
     if (!postData.success || !postData.request?.id) throw new Error('Create booking request failed');
     const reqId = postData.request.id;
 
-    // 16.2 Master fetches list of pending booking requests
+    // 20.2 Master fetches list of pending booking requests
     const listRes = await fetch(`${BASE_URL}/booking-requests?masterId=u-1`);
     const listData = await listRes.json();
     if (!Array.isArray(listData.requests) || listData.requests.length === 0) {
       throw new Error('List booking requests empty');
     }
 
-    // 16.3 Master accepts request -> creates appointment in schedule
+    // 20.3 Master accepts request -> creates appointment in schedule
     const acceptRes = await fetch(`${BASE_URL}/booking-requests/${reqId}/accept`, {
       method: 'POST',
     });
@@ -250,7 +354,7 @@ async function runTests() {
     if (!acceptData.success || !acceptData.appointment) throw new Error('Accept booking request failed');
   });
 
-  console.log(`\n🎉 RESULTS: ${passed} passed, ${failed} failed.`);
+  console.log(`\n🎉 ALL TESTS COMPLETED: ${passed} passed, ${failed} failed.`);
   if (failed > 0) process.exit(1);
 }
 

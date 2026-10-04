@@ -119,7 +119,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onFinish }) 
     return (
       <View style={styles.mockupCard}>
         <View style={styles.bioCard}>
-          <Text style={styles.bioTitle}>{APP_BASE_URL}/b/usta</Text>
+          <Text style={styles.bioTitle}>{APP_BASE_URL}/b/abubakir</Text>
           <Text style={styles.bioSub}>Mijozlaringiz uchun shaxsiy onlayn yozilish havolasi</Text>
           <View style={styles.bioBadge}>
             <Sparkles size={14} color={colors.primary} />

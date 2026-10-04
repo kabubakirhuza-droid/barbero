@@ -10,11 +10,6 @@ router.get('/', (req: Request, res: Response) => {
   res.json({
     user,
     bookingLink: `${APP_BASE_URL}/b/${user.username}`,
-    subscription: {
-      status: user.subscriptionStatus,
-      validUntil: '4 Oktabr 2026 gacha',
-      rawDate: user.subscriptionUntil,
-    },
     settings: db.userSettings,
     appVersion: '1.0.9',
   });

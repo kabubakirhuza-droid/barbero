@@ -36,49 +36,52 @@ export const HelpModal: React.FC<HelpModalProps> = ({ visible, onClose }) => {
   const [ticketMessage, setTicketMessage] = useState('');
   const [ticketSent, setTicketSent] = useState(false);
 
-  const faqs = language === 'uz' ? [
-    {
-      q: 'BARBERO ilovasiga yangi mijozni qanday qo‘shish mumkin?',
-      a: '«Jadval» bo‘limida kerakli vaqt katagidagi «+ Bo‘sh vaqt» tugmasini yoki o‘ng tarafdagi «+» tugmasini bosing. Mijoz ismi, telefon raqami va kerakli xizmatni tanlab «Saqlash» tugmasini bosing.',
-    },
-    {
-      q: 'Obunani qanday faollashtirish yoki uzaytirish mumkin?',
-      a: '«Profil» bo‘limidagi «Mening obunam» bandiga kiring va «Obunani uzaytirish / Sotib olish» tugmasini bosing. Click, Payme yoki Uzum Bank orqali to‘lovni amalga oshirishingiz mumkin.',
-    },
-    {
-      q: 'Telegram orqali SMS eslatmalar qanday ishlaydi?',
-      a: 'Mijoz yozilganda va qabul vaqtidan 2 soat oldin tizim avtomatik ravishda mijozga Telegram Gateway orqali eslatma va manzilni yuboradi.',
-    },
-    {
-      q: 'Sartaroshxonani xaritaga qanday joylashtirish mumkin?',
-      a: '«Sartaroshxona va xarita» bo‘limiga o‘tib, lokatsiyani tanlang va xaritada o‘z sartaroshxonangizni ko‘rsatib saqlang.',
-    },
-    {
-      q: 'Daromadlar va mijozlar hisoboti qayerda ko‘rinadi?',
-      a: 'Pastki paneldagi «Analitika» bo‘limida kunlik, haftalik va oylik daromadlar, o‘rtacha chek va eng ommabop xizmatlar ko‘rsatiladi.',
-    },
-  ] : [
-    {
-      q: 'Как добавить нового клиента в приложение BARBERO?',
-      a: 'В разделе «Расписание» нажмите на нужный временной слот или кнопку «+». Введите имя клиента, номер телефона, выберите услугу и нажмите «Сохранить».',
-    },
-    {
-      q: 'Как активировать или продлить подписку?',
-      a: 'Перейдите в раздел «Профиль» -> «Моя подписка» и нажмите «Продлить / Купить подписку». Оплату можно произвести через Click, Payme или Uzum Bank.',
-    },
-    {
-      q: 'Как работают уведомления и напоминания в Telegram?',
-      a: 'При записи клиента и за 2 часа до визита система автоматически отправляет клиенту напоминание и локацию через Telegram Gateway.',
-    },
-    {
-      q: 'Как добавить барбершоп на карту?',
-      a: 'Перейдите в раздел «Барбершоп и карта», укажите точный адрес на карте и сохраните геопозицию.',
-    },
-    {
-      q: 'Где посмотреть отчет о доходах и клиентах?',
-      a: 'В нижней панели в разделе «Аналитика» доступны графики доходов за день/неделю/месяц, средний чек и топ услуг.',
-    },
-  ];
+  const faqs =
+    language === 'uz'
+      ? [
+          {
+            q: 'Barbero ilovasiga yangi mijozni qanday qo‘shish mumkin?',
+            a: '«Jadval» bo‘limida kerakli vaqt katagidagi «+ Bo‘sh vaqt» tugmasini bosing yoki o‘sha vaqtga bir marta bosish orqali tezkor yozuv yarating. So‘ng mijoz ismi va xizmatni tahrirlashingiz mumkin.',
+          },
+          {
+            q: 'Barbero ilovasidan foydalanish bepulmi?',
+            a: 'Ha, hozirda Barbero ilovasining barcha imkoniyatlari ustalarga mutlaqo bepul taqdim etiladi.',
+          },
+          {
+            q: 'Mijozlar uchun shaxsiy havola qanday ishlaydi?',
+            a: '«Profil» bo‘limidagi «Booking link» tugmasini bosing. O‘z havolangizni nusxalab, Instagram yoki Telegram profilingizga joylashtiring. Mijozlar havola orqali 24/7 o‘zlari qabulga yoziladilar.',
+          },
+          {
+            q: 'Sartaroshxonani xaritaga qanday joylashtirish mumkin?',
+            a: '«Sartaroshxonam» bo‘limiga o‘tib, lokatsiyani tanlang va xaritada o‘z sartaroshxonangiz manzilini saqlang.',
+          },
+          {
+            q: 'Daromadlar va mijozlar hisoboti qayerda ko‘rinadi?',
+            a: 'Pastki paneldagi «Analitika» bo‘limida haftalik, oylik va yillik daromadlar, o‘rtacha to‘lov, yangi mijozlar va bandlik foizi ko‘rsatiladi.',
+          },
+        ]
+      : [
+          {
+            q: 'Как добавить нового клиента в приложение Barbero?',
+            a: 'В разделе «Расписание» нажмите на нужный слот времени для быстрой записи в один клик. Затем вы можете отредактировать имя клиента и услугу.',
+          },
+          {
+            q: 'Приложение Barbero бесплатное?',
+            a: 'Да, в настоящее время все функции приложения Barbero абсолютно бесплатны для мастеров.',
+          },
+          {
+            q: 'Как работает персональная ссылка для записи?',
+            a: 'В разделе «Профиль» перейдите в «Ссылка для записи». Скопируйте ссылку и укажите ее в bio Instagram или профиле Telegram для круглосуточной онлайн-записи.',
+          },
+          {
+            q: 'Как добавить парикмахерскую на карту?',
+            a: 'Перейдите в раздел «Моя парикмахерская», укажите точный адрес на карте и сохраните геопозицию.',
+          },
+          {
+            q: 'Где посмотреть отчет о доходах и клиентах?',
+            a: 'В нижней панели в разделе «Аналитика» доступны графики доходов за неделю/месяц/год, средний чек, новые клиенты и занятость.',
+          },
+        ];
 
   const handleOpenTelegram = () => {
     const url = 'https://t.me/barbero_support';
@@ -111,11 +114,17 @@ export const HelpModal: React.FC<HelpModalProps> = ({ visible, onClose }) => {
           <TouchableOpacity style={styles.backBtn} onPress={onClose} activeOpacity={0.7}>
             <ChevronLeft size={24} color={colors.textPrimary} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>{language === 'uz' ? 'Yordam va qo‘llab-quvvatlash' : 'Помощь и поддержка'}</Text>
+          <Text style={styles.headerTitle}>
+            {language === 'uz' ? 'Yordam va qo‘llab-quvvatlash' : 'Помощь и поддержка'}
+          </Text>
           <View style={{ width: 40 }} />
         </View>
 
-        <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
           {/* Support Channels Banner */}
           <View style={styles.quickContactCard}>
             <View style={styles.supportBadge}>
@@ -148,7 +157,9 @@ export const HelpModal: React.FC<HelpModalProps> = ({ visible, onClose }) => {
           {/* FAQ Accordion */}
           <View style={styles.sectionHeaderRow}>
             <Text style={styles.sectionTitle}>
-              {language === 'uz' ? 'Ko‘p beriladigan savollar (FAQ)' : 'Часто задаваемые вопросы (FAQ)'}
+              {language === 'uz'
+                ? 'Ko‘p beriladigan savollar (FAQ)'
+                : 'Часто задаваемые вопросы (FAQ)'}
             </Text>
           </View>
 
@@ -185,7 +196,9 @@ export const HelpModal: React.FC<HelpModalProps> = ({ visible, onClose }) => {
             <View style={styles.ticketHeader}>
               <Mail size={20} color={COLOR_PRIMARY} />
               <Text style={styles.ticketTitle}>
-                {language === 'uz' ? 'To‘g‘ridan-to‘g‘ri xabar yuborish' : 'Отправить сообщение в поддержку'}
+                {language === 'uz'
+                  ? 'To‘g‘ridan-to‘g‘ri xabar yuborish'
+                  : 'Отправить сообщение в поддержку'}
               </Text>
             </View>
             <Text style={styles.ticketSubtitle}>
@@ -205,7 +218,11 @@ export const HelpModal: React.FC<HelpModalProps> = ({ visible, onClose }) => {
               <View style={styles.ticketInputWrap}>
                 <TextInput
                   style={styles.ticketInput}
-                  placeholder={language === 'uz' ? 'Savolingizni shu yerga yozing...' : 'Напишите ваш вопрос здесь...'}
+                  placeholder={
+                    language === 'uz'
+                      ? 'Savolingizni shu yerga yozing...'
+                      : 'Напишите ваш вопрос здесь...'
+                  }
                   placeholderTextColor={colors.textMuted}
                   multiline
                   numberOfLines={3}

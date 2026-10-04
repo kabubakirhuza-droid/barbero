@@ -10,8 +10,7 @@ export interface User {
   username: string;
   avatarUrl?: string;
   bio?: string;
-  subscriptionStatus: 'free' | 'premium';
-  subscriptionUntil: string;
+  role?: 'MASTER' | 'CLIENT';
 }
 
 export interface Salon {
@@ -103,6 +102,16 @@ export interface PortfolioPhoto {
   createdAt: string;
 }
 
+export interface PushSubscriptionItem {
+  id: string;
+  userId: string;
+  endpoint: string;
+  p256dh: string;
+  auth: string;
+  device?: string;
+  createdAt: string;
+}
+
 export interface UserSettings {
   bookingLinkActive: boolean;
   allowCustomTimeRequest: boolean;
@@ -146,8 +155,7 @@ class AppDatabase {
       username: 'abubakir',
       avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&q=80',
       bio: 'Professional Barbershop & Men Grooming Stylist',
-      subscriptionStatus: 'premium',
-      subscriptionUntil: '2026-10-04T00:00:00.000Z',
+      role: 'MASTER',
     },
     {
       id: 'u-2',
@@ -158,8 +166,7 @@ class AppDatabase {
       username: 'javohir_k',
       avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&q=80',
       bio: 'Fade master & Barber artist',
-      subscriptionStatus: 'premium',
-      subscriptionUntil: '2026-12-01T00:00:00.000Z',
+      role: 'MASTER',
     },
   ];
 
@@ -201,7 +208,7 @@ class AppDatabase {
     },
   ];
 
-  // 5 Default services as requested
+  // 5 Default services
   public services: Service[] = [
     {
       id: 'srv-1',
@@ -379,6 +386,8 @@ class AppDatabase {
       createdAt: new Date().toISOString(),
     },
   ];
+
+  public pushSubscriptions: PushSubscriptionItem[] = [];
 
   public userSettings: UserSettings = {
     bookingLinkActive: true,

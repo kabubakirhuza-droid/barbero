@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -7,8 +7,9 @@ import {
   TouchableOpacity,
   TextInput,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
-import { Calendar, TrendingUp, Users, Clock, ChevronRight } from 'lucide-react-native';
+import { Calendar, TrendingUp, Users, Clock, AlertCircle, RefreshCw, BarChart2 } from 'lucide-react-native';
 import { colors } from '../theme/colors';
 import { useTranslation } from '../i18n/LanguageContext';
 import { Skeleton } from '../components/Skeleton';
@@ -19,71 +20,71 @@ import { api } from '../api/apiClient';
 
 export const AnalitikaScreen: React.FC = () => {
   const { t } = useTranslation();
-  const [period, setPeriod] = useState<'hafta' | 'oy' | 'yil'>('oy');
-  const [loading, setLoading] = useState(false);
+  const [period, setPeriod] = useState<'hafta' | 'oy' | 'yil' | 'custom'>('oy');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<AnalyticsData | null>(null);
 
   // Custom date range bottom sheet
   const [isRangeSheetVisible, setIsRangeSheetVisible] = useState(false);
-  const [startDateInput, setStartDateInput] = useState('29 Sen 2026');
-  const [endDateInput, setEndDateInput] = useState('4 Okt 2026');
+  const [startDateInput, setStartDateInput] = useState('2026-09-01');
+  const [endDateInput, setEndDateInput] = useState('2026-09-30');
+  const [rangeError, setRangeError] = useState<string | null>(null);
 
-  const fetchAnalytics = async (selectedPeriod: 'hafta' | 'oy' | 'yil') => {
-    setLoading(true);
-    try {
-      const res = await api.getAnalytics(selectedPeriod);
-      setData(res);
-    } catch (e) {
-      // offline fallback matching specifications
-      setData({
-        period: selectedPeriod,
-        revenue: {
-          total: 50000,
-          formatted: '50 000 uzs',
-          totalBookings: 1,
-          avgPayment: 50000,
-          growthRate: '+100%',
-          title: selectedPeriod === 'hafta' ? 'Haftalik daromad' : selectedPeriod === 'yil' ? 'Yillik daromad' : 'Oylik daromad',
-          subtitle: "1 ta yozuv, o'rtacha to'lov 50 000 uzs",
-        },
-        metrics: {
-          clients: {
-            total: 1,
-            growth: '+1 yangi mijoz',
-          },
-          occupancy: {
-            percent: '0%',
-            ratio: '1/313 kun',
-          },
-        },
-        dynamics: {
-          title: 'Tushum dinamikasi',
-          subtitle: "Oylar bo'yicha",
-          badge: '+100%',
-          chart: [
-            { month: 'Yan', amount: 0, heightPercent: 12 },
-            { month: 'Fev', amount: 0, heightPercent: 10 },
-            { month: 'Mar', amount: 0, heightPercent: 15 },
-            { month: 'Apr', amount: 0, heightPercent: 10 },
-            { month: 'May', amount: 0, heightPercent: 14 },
-            { month: 'Iyun', amount: 0, heightPercent: 18 },
-            { month: 'Iyul', amount: 0, heightPercent: 25 },
-            { month: 'Avg', amount: 25000, heightPercent: 45 },
-            { month: 'Sen', amount: 50000, heightPercent: 88 },
-            { month: 'Okt', amount: 0, heightPercent: 10 },
-            { month: 'Noy', amount: 0, heightPercent: 10 },
-            { month: 'Dek', amount: 0, heightPercent: 10 },
-          ],
-        },
-      });
-    } finally {
-      setTimeout(() => setLoading(false), 400);
-    }
-  };
+  const fetchAnalytics = useCallback(
+    async (
+      selectedPeriod: 'hafta' | 'oy' | 'yil' | 'custom',
+      customFrom?: string,
+      customTo?: string
+    ) => {
+      setLoading(true);
+      setError(null);
+      try {
+        const res = await api.getAnalytics(
+          selectedPeriod === 'custom' ? 'oy' : selectedPeriod,
+          customFrom,
+          customTo
+        );
+        setData(res);
+      } catch (err: any) {
+        console.warn('[AnalitikaScreen] Error fetching analytics:', err.message);
+        if (!data) {
+          setError(err.message || 'Maʼlumotlarni yuklab bo‘lmadi');
+        }
+      } finally {
+        setLoading(false);
+      }
+    },
+    [data]
+  );
 
   useEffect(() => {
-    fetchAnalytics(period);
+    if (period !== 'custom') {
+      fetchAnalytics(period);
+    }
   }, [period]);
+
+  const handleApplyCustomRange = () => {
+    setRangeError(null);
+    const from = startDateInput.trim();
+    const to = endDateInput.trim();
+
+    if (!from || !to) {
+      setRangeError("Sanalar to'liq kiritilishi kerak (YYYY-MM-DD)");
+      return;
+    }
+
+    if (from > to) {
+      setRangeError(t('rangeErrorMsg'));
+      return;
+    }
+
+    setIsRangeSheetVisible(false);
+    setPeriod('custom');
+    fetchAnalytics('custom', from, to);
+  };
+
+  const isEmpty = data && data.revenue.totalBookings === 0;
 
   return (
     <View style={styles.container}>
@@ -116,27 +117,45 @@ export const AnalitikaScreen: React.FC = () => {
 
           {/* Calendar Range Button */}
           <TouchableOpacity
-            style={styles.rangeBtn}
+            style={[styles.rangeBtn, period === 'custom' && styles.rangeBtnActive]}
             onPress={() => setIsRangeSheetVisible(true)}
             activeOpacity={0.7}
           >
-            <Calendar size={18} color={colors.primary} />
+            <Calendar size={18} color={period === 'custom' ? '#FFFFFF' : colors.primary} />
           </TouchableOpacity>
         </View>
 
-        {loading || !data ? (
-          /* Skeletons loader state */
+        {/* Loading State: Skeletons */}
+        {loading && !data && (
           <View style={styles.skeletonsContainer}>
             <Skeleton height={140} borderRadius={20} />
             <View style={styles.metricsRow}>
-              <Skeleton width="48%" height={100} borderRadius={18} />
-              <Skeleton width="48%" height={100} borderRadius={18} />
+              <Skeleton width="48%" height={110} borderRadius={18} />
+              <Skeleton width="48%" height={110} borderRadius={18} />
             </View>
-            <Skeleton height={220} borderRadius={20} />
+            <Skeleton height={230} borderRadius={20} />
           </View>
-        ) : (
+        )}
+
+        {/* Error State with Retry */}
+        {error && !data && !loading && (
+          <View style={styles.errorContainer}>
+            <AlertCircle size={36} color={colors.danger} />
+            <Text style={styles.errorTitle}>{t('somethingWentWrong')}</Text>
+            <Text style={styles.errorSubtitle}>{error}</Text>
+            <Button
+              title={t('retryBtn')}
+              onPress={() => fetchAnalytics(period)}
+              variant="outline"
+              style={{ marginTop: 12 }}
+            />
+          </View>
+        )}
+
+        {/* Loaded Data Content */}
+        {data && (
           <>
-            {/* 2. Golden Card: Oylik daromad */}
+            {/* 2. Golden Card: Daromad */}
             <View style={styles.goldenRevenueCard}>
               <View style={styles.goldenTopRow}>
                 <Text style={styles.goldenTitle}>{data.revenue.title}</Text>
@@ -181,7 +200,18 @@ export const AnalitikaScreen: React.FC = () => {
               </View>
             </View>
 
-            {/* 4. Tushum dinamikasi with Bar Chart */}
+            {/* 4. Empty state indicator if 0 bookings in period */}
+            {isEmpty && (
+              <View style={styles.emptyCard}>
+                <BarChart2 size={28} color={colors.textMuted} />
+                <Text style={styles.emptyTitle}>{t('noDataYet')}</Text>
+                <Text style={styles.emptySubtitle}>
+                  Ushbu davrda hali tasdiqlangan yozuvlar mavjud emas
+                </Text>
+              </View>
+            )}
+
+            {/* 5. Tushum dinamikasi with dynamic Bar Chart */}
             <View style={styles.dynamicsCard}>
               <View style={styles.dynamicsHeader}>
                 <View>
@@ -195,32 +225,35 @@ export const AnalitikaScreen: React.FC = () => {
               </View>
 
               {/* Animated Bar Chart */}
-              <View style={styles.chartContainer}>
-                {data.dynamics.chart.map((bar, i) => {
-                  const isCurrent = bar.month === 'Sen';
-                  return (
-                    <View key={i} style={styles.chartCol}>
-                      <View style={styles.chartBarWrapper}>
-                        <View
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                <View style={styles.chartContainer}>
+                  {data.dynamics.chart.map((bar, i) => {
+                    const isCurrent = !!bar.isCurrent;
+                    const label = bar.label || bar.month || '';
+                    return (
+                      <View key={i} style={styles.chartCol}>
+                        <View style={styles.chartBarWrapper}>
+                          <View
+                            style={[
+                              styles.chartBar,
+                              { height: `${bar.heightPercent}%` },
+                              isCurrent && styles.chartBarActive,
+                            ]}
+                          />
+                        </View>
+                        <Text
                           style={[
-                            styles.chartBar,
-                            { height: `${bar.heightPercent}%` },
-                            isCurrent && styles.chartBarActive,
+                            styles.chartMonthText,
+                            isCurrent && styles.chartMonthTextActive,
                           ]}
-                        />
+                        >
+                          {label}
+                        </Text>
                       </View>
-                      <Text
-                        style={[
-                          styles.chartMonthText,
-                          isCurrent && styles.chartMonthTextActive,
-                        ]}
-                      >
-                        {bar.month}
-                      </Text>
-                    </View>
-                  );
-                })}
-              </View>
+                    );
+                  })}
+                </View>
+              </ScrollView>
             </View>
           </>
         )}
@@ -233,26 +266,37 @@ export const AnalitikaScreen: React.FC = () => {
         title={t('selectRangeTitle')}
       >
         <View style={styles.rangeSheetContent}>
+          {rangeError && (
+            <View style={styles.rangeErrorBox}>
+              <AlertCircle size={16} color={colors.danger} />
+              <Text style={styles.rangeErrorText}>{rangeError}</Text>
+            </View>
+          )}
+
           <View style={styles.rangeInputGroup}>
-            <Text style={styles.rangeLabel}>{t('startDateLabel')}</Text>
+            <Text style={styles.rangeLabel}>{t('startDateLabel')} (YYYY-MM-DD)</Text>
             <View style={styles.rangeInputBox}>
               <Calendar size={18} color={colors.primary} />
               <TextInput
                 style={styles.rangeTextInput}
                 value={startDateInput}
                 onChangeText={setStartDateInput}
+                placeholder="2026-09-01"
+                placeholderTextColor={colors.textMuted}
               />
             </View>
           </View>
 
           <View style={styles.rangeInputGroup}>
-            <Text style={styles.rangeLabel}>{t('endDateLabel')}</Text>
+            <Text style={styles.rangeLabel}>{t('endDateLabel')} (YYYY-MM-DD)</Text>
             <View style={styles.rangeInputBox}>
               <Calendar size={18} color={colors.primary} />
               <TextInput
                 style={styles.rangeTextInput}
                 value={endDateInput}
                 onChangeText={setEndDateInput}
+                placeholder="2026-09-30"
+                placeholderTextColor={colors.textMuted}
               />
             </View>
           </View>
@@ -266,10 +310,7 @@ export const AnalitikaScreen: React.FC = () => {
             />
             <Button
               title={t('applyFilter')}
-              onPress={() => {
-                setIsRangeSheetVisible(false);
-                fetchAnalytics(period);
-              }}
+              onPress={handleApplyCustomRange}
               style={{ flex: 1 }}
             />
           </View>
@@ -335,8 +376,33 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  rangeBtnActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
   skeletonsContainer: {
     gap: 16,
+  },
+  errorContainer: {
+    backgroundColor: colors.card,
+    borderRadius: 20,
+    padding: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    gap: 8,
+    marginVertical: 20,
+  },
+  errorTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: colors.textPrimary,
+  },
+  errorSubtitle: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    textAlign: 'center',
   },
   goldenRevenueCard: {
     backgroundColor: colors.primary,
@@ -451,6 +517,26 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.textSecondary,
   },
+  emptyCard: {
+    backgroundColor: colors.card,
+    borderRadius: 16,
+    padding: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    gap: 6,
+  },
+  emptyTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: colors.textPrimary,
+  },
+  emptySubtitle: {
+    fontSize: 12,
+    color: colors.textMuted,
+    textAlign: 'center',
+  },
   dynamicsCard: {
     backgroundColor: colors.card,
     borderRadius: 20,
@@ -494,14 +580,16 @@ const styles = StyleSheet.create({
   },
   chartContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'flex-end',
     height: 140,
     paddingTop: 10,
+    minWidth: '100%',
+    justifyContent: 'space-around',
+    gap: 8,
   },
   chartCol: {
     alignItems: 'center',
-    flex: 1,
+    minWidth: 28,
   },
   chartBarWrapper: {
     height: 105,
@@ -531,6 +619,20 @@ const styles = StyleSheet.create({
   rangeSheetContent: {
     gap: 16,
   },
+  rangeErrorBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#FCEBEB',
+    padding: 10,
+    borderRadius: 10,
+  },
+  rangeErrorText: {
+    fontSize: 12,
+    color: colors.danger,
+    fontWeight: '600',
+    flex: 1,
+  },
   rangeInputGroup: {
     gap: 6,
   },
@@ -555,6 +657,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
     color: colors.textPrimary,
+    ...(Platform.OS === 'web' ? ({ outlineStyle: 'none', outlineWidth: 0 } as any) : {}),
   },
   rangeActionsRow: {
     flexDirection: 'row',

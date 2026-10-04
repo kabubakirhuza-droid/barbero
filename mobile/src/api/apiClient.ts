@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Appointment, Service, PortfolioPhoto, AnalyticsData, User, WorkingDay, UserSettings, Salon } from '../types';
+import { Appointment, Service, PortfolioPhoto, AnalyticsData, User, WorkingDay, UserSettings, Salon, BookingRequest } from '../types';
 
 // Dynamic base URL for local development vs Vercel production
 const getApiBaseUrl = () => {
@@ -16,14 +16,14 @@ const getApiBaseUrl = () => {
 };
 
 const API_BASE_URL = getApiBaseUrl();
-const TOKEN_KEY = 'app_token';
+const TOKEN_KEY = 'barbero_token';
 
 class ApiClient {
   private token: string | null = null;
 
   async initToken() {
     try {
-      this.token = await AsyncStorage.getItem(TOKEN_KEY);
+      this.token = (await AsyncStorage.getItem(TOKEN_KEY)) || (await AsyncStorage.getItem('app_token'));
     } catch (e) {
       // ignore
     }
@@ -37,9 +37,26 @@ class ApiClient {
   clearToken() {
     this.token = null;
     AsyncStorage.removeItem(TOKEN_KEY);
+    AsyncStorage.removeItem('app_token');
   }
 
-  private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  private async fetchWithTimeout(url: string, options: RequestInit, timeoutMs = 15000): Promise<Response> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const response = await fetch(url, {
+        ...options,
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
+      return response;
+    } catch (error) {
+      clearTimeout(timer);
+      throw error;
+    }
+  }
+
+  private async request<T>(endpoint: string, options: RequestInit = {}, retries = 2): Promise<T> {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       ...(options.headers as any),
@@ -49,31 +66,43 @@ class ApiClient {
       headers['Authorization'] = `Bearer ${this.token}`;
     }
 
-    try {
-      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-        ...options,
-        headers,
-      });
+    const isGet = !options.method || options.method === 'GET';
+    let lastError: any = null;
+    const maxAttempts = isGet ? retries + 1 : 1;
 
-      if (!response.ok) {
-        if (response.status === 405 || response.status === 404 || response.status >= 500) {
-          return this.mockFallback<T>(endpoint, options);
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      try {
+        const response = await this.fetchWithTimeout(`${API_BASE_URL}${endpoint}`, {
+          ...options,
+          headers,
+        }, 15000);
+
+        if (!response.ok) {
+          if (response.status === 405 || response.status === 404 || response.status >= 500) {
+            return this.mockFallback<T>(endpoint, options);
+          }
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error || `Request failed with status ${response.status}`);
         }
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `Request failed with status ${response.status}`);
-      }
 
-      return await response.json();
-    } catch (err: any) {
-      console.warn(`[ApiClient] Request to ${endpoint} failed, activating offline/demo fallback:`, err.message);
-      return this.mockFallback<T>(endpoint, options);
+        return await response.json();
+      } catch (err: any) {
+        lastError = err;
+        if (attempt < maxAttempts - 1) {
+          // Wait with exponential backoff: 300ms, 600ms
+          await new Promise((resolve) => setTimeout(resolve, 300 * (attempt + 1)));
+        }
+      }
     }
+
+    console.warn(`[ApiClient] Request to ${endpoint} failed after ${maxAttempts} attempts:`, lastError?.message);
+    return this.mockFallback<T>(endpoint, options);
   }
 
   private mockFallback<T>(endpoint: string, options: RequestInit = {}): T {
     const body = options.body ? JSON.parse(options.body as string) : {};
 
-    if (endpoint === '/auth/send-code') {
+    if (endpoint.startsWith('/auth/send-code')) {
       return {
         success: true,
         requestId: 'req_' + Date.now(),
@@ -83,15 +112,15 @@ class ApiClient {
       } as any;
     }
 
-    if (endpoint === '/auth/verify') {
+    if (endpoint.startsWith('/auth/verify')) {
       const mockUser: User = {
-        id: 'u_' + Date.now(),
-        phone: body.phone || '+998901234567',
-        ism: 'Bobur',
+        id: 'u-1',
+        phone: body.phone || '+998900335102',
+        ism: 'Abubakir',
         familiya: 'Aliyev',
+        fullName: 'Abubakir Aliyev',
+        username: 'abubakir',
         role: 'MASTER',
-        status: 'active',
-        createdAt: new Date().toISOString(),
       };
       const token = 'jwt_mock_token_' + Date.now();
       this.setToken(token);
@@ -102,29 +131,91 @@ class ApiClient {
       } as any;
     }
 
-    if (endpoint === '/auth/register-profile') {
+    if (endpoint.startsWith('/auth/register-profile')) {
       return {
         success: true,
         user: {
-          id: 'u_' + Date.now(),
-          ism: body.ism || 'Bobur',
+          id: 'u-1',
+          ism: body.ism || 'Abubakir',
           familiya: body.familiya || 'Aliyev',
-          phone: body.phone,
+          phone: body.phone || '+998900335102',
+          fullName: `${body.ism || 'Abubakir'} ${body.familiya || 'Aliyev'}`,
+          username: (body.ism || 'abubakir').toLowerCase(),
           role: body.role || 'MASTER',
         },
       } as any;
     }
 
-    if (endpoint === '/auth/me' || endpoint === '/profile') {
+    if (endpoint.startsWith('/analytics')) {
+      return {
+        period: 'oy',
+        from: '2026-09-01',
+        to: '2026-09-30',
+        revenue: {
+          total: 120000,
+          formatted: '120 000 uzs',
+          totalBookings: 2,
+          avgPayment: 60000,
+          growthRate: 'Yangi',
+          title: 'Oylik daromad',
+          subtitle: "2 ta yozuv, o'rtacha to'lov 60 000 uzs",
+        },
+        metrics: {
+          clients: {
+            total: 2,
+            growth: '+2 yangi mijoz',
+            newClients: 2,
+          },
+          occupancy: {
+            percent: '4%',
+            ratio: '1/26 kun',
+            bookedDays: 1,
+            workingDays: 26,
+          },
+        },
+        dynamics: {
+          title: 'Tushum dinamikasi',
+          subtitle: "Kunlar bo'yicha",
+          badge: 'Yangi',
+          chart: [
+            { label: '28', month: '28', amount: 0, heightPercent: 6 },
+            { label: '29', month: '29', amount: 120000, heightPercent: 100, isCurrent: true },
+            { label: '30', month: '30', amount: 0, heightPercent: 6 },
+          ],
+        },
+      } as any;
+    }
+
+    if (endpoint.startsWith('/auth/me') || endpoint.startsWith('/profile')) {
       return {
         user: {
-          id: 'u_1',
-          ism: 'Bobur',
+          id: 'u-1',
+          ism: 'Abubakir',
           familiya: 'Aliyev',
+          fullName: 'Abubakir Aliyev',
+          username: 'abubakir',
           phone: '+998 90 033 51 02',
           role: 'MASTER',
-          status: 'active',
         },
+        bookingLink: 'http://localhost:8081/b/abubakir',
+        settings: {
+          bookingLinkActive: true,
+          allowCustomTimeRequest: false,
+          allowLunchTimeBooking: false,
+          dailyReminderActive: true,
+          dailyReminderTime: '09:00',
+          aiModeActive: true,
+          clientSmsReminderActive: true,
+          appLanguage: 'uz',
+          biometricsEnabled: true,
+        },
+        appVersion: '1.0.9',
+      } as any;
+    }
+
+    if (endpoint.startsWith('/push/vapid-public-key')) {
+      return {
+        publicKey: 'BM-8Mn8egdGXkKokUrxWVl5XabsOj-b3ZfHIQ-bb879jaiY6uGatyTcSUV5fu2-vE20kDGywC8ruGWno9kU-M1U',
       } as any;
     }
 
@@ -224,7 +315,7 @@ class ApiClient {
   }
 
   // Analytics
-  async getAnalytics(period: 'hafta' | 'oy' | 'yil' = 'oy', from?: string, to?: string) {
+  async getAnalytics(period: 'hafta' | 'oy' | 'yil' | 'custom' = 'oy', from?: string, to?: string) {
     let query = `?period=${period}`;
     if (from) query += `&from=${from}`;
     if (to) query += `&to=${to}`;
@@ -254,7 +345,6 @@ class ApiClient {
     return this.request<{
       user: User;
       bookingLink: string;
-      subscription: { status: string; validUntil: string };
       settings: UserSettings;
       appVersion: string;
     }>('/profile');
@@ -305,7 +395,7 @@ class ApiClient {
 
   // Booking Requests (from public booking link)
   async getBookingRequests() {
-    return this.request<{ requests: any[]; count: number }>('/booking-requests');
+    return this.request<{ requests: BookingRequest[]; count: number }>('/booking-requests');
   }
 
   async createBookingRequest(data: {
@@ -334,6 +424,36 @@ class ApiClient {
       `/booking-requests/${id}/reject`,
       { method: 'POST' }
     );
+  }
+
+  // Push notifications
+  async getVapidPublicKey() {
+    return this.request<{ publicKey: string }>('/push/vapid-public-key');
+  }
+
+  async subscribePush(subscription: any, device?: string) {
+    return this.request<{ success: boolean; message: string }>('/push/subscribe', {
+      method: 'POST',
+      body: JSON.stringify({ subscription, device }),
+    });
+  }
+
+  async unsubscribePush(endpoint: string) {
+    return this.request<{ success: boolean; message: string }>('/push/unsubscribe', {
+      method: 'POST',
+      body: JSON.stringify({ endpoint }),
+    });
+  }
+
+  async sendTestPush(endpoint?: string) {
+    return this.request<{ success: boolean; message: string }>('/push/test', {
+      method: 'POST',
+      body: JSON.stringify({ endpoint }),
+    });
+  }
+
+  async getPushStatus() {
+    return this.request<{ active: boolean; count: number; subscriptions: any[] }>('/push/status');
   }
 
   // Public Booking

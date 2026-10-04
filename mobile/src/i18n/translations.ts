@@ -1,12 +1,12 @@
 export const translations = {
   uz: {
-    // Navigation Tabs (Exactly 4 tabs, no Do'kon)
+    // Navigation Tabs (4 tabs)
     tabJadval: 'Jadval',
     tabAnalitika: 'Analitika',
     tabPortfolio: 'Portfolio',
     tabProfil: 'Profil',
 
-    // Onboarding (Exactly 3 slides: Jadval, Daromad, Booking link)
+    // Onboarding (3 slides: Jadval, Daromad, Booking link)
     skip: "O'tkazib yuborish",
     continue: 'Davom etish',
     onboardingSlide1Sub: 'JADVAL',
@@ -21,11 +21,11 @@ export const translations = {
 
     // Auth
     welcomeTitle: 'Xush kelibsiz!',
-    welcomeSub: 'Biz bilan oson rejalashtiring va maqsadingiz sari birinchi qadamni tashlang!',
+    welcomeSub: 'Barbero bilan oson rejalashtiring va maqsadingiz sari birinchi qadamni tashlang!',
     phoneLabel: 'Telefon raqam',
     submitPhone: 'Kodni olish',
     smsVerifyTitle: 'Sms kodni tasdiqlang!',
-    smsVerifySub: 'Biz +998 90 *** ** 02 raqamingizga tasdiqlash kodini yubordik. Iltimos kodni kiriting!',
+    smsVerifySub: 'Biz raqamingizga tasdiqlash kodini yubordik. Iltimos kodni kiriting!',
     timeLeft: 'Qolgan vaqt:',
     codeNotReceived: 'Kod kelmadimi:',
     getViaTelegram: 'Telegram orqali olish',
@@ -93,11 +93,14 @@ export const translations = {
     endDateLabel: 'Tugash',
     cancelFilter: 'Bekor qilish',
     applyFilter: "Qo'llash",
-    monthlyRevenueTitle: 'Oylik daromad',
+    monthlyRevenueTitle: 'Daromad',
     clientsMetricTitle: 'Mijozlar',
     occupancyMetricTitle: 'Bandlik',
     revenueDynamicsTitle: 'Tushum dinamikasi',
     byMonths: "Oylar bo'yicha",
+    rangeErrorMsg: "Boshlanish sanasi tugashdan keyin bo'lishi mumkin emas",
+    noDataYet: "Hozircha ma'lumot yo'q",
+    retryBtn: "Qayta urinish",
 
     // Portfolio
     portfolioTitle: 'Portfolio',
@@ -105,15 +108,11 @@ export const translations = {
     publicBadge: 'Ommaviy',
 
     // Profile
-    premiumBannerTitle: 'Premium obuna',
-    premiumValidUntil: '4 Oktabr 2026 gacha',
     groupServices: 'Xizmatlar',
     groupSettings: 'Sozlamalar',
     serviceTypes: 'Xizmat turlari',
     bookingLink: 'Booking link',
     bookingRequests: "Bron so'rovlari",
-    mySubscriptions: 'Obunalarim',
-    buySubscription: 'Obuna sotib olish',
     workingHours: 'Ish vaqti',
     notifications: 'Bildirishnomalar',
     videoTutorials: 'Video darsliklar',
@@ -125,12 +124,12 @@ export const translations = {
     help: 'Yordam',
     legalDocs: 'Huquqiy hujjatlar',
     logout: 'Chiqish',
-    versionText: 'versiya 1.0.9',
+    versionText: 'Barbero • versiya 1.0.9',
 
     // Booking Link Subscreen
     linkWorkingStatus: 'Havolangiz ishlayapti',
     shareLinkBtn: 'Havolani ulashish',
-    shareLinkHint: "Telegram profiling yoki Instagram bio'ga qo'ying",
+    shareLinkHint: "Telegram profilingiz yoki Instagram bio'ga qo'ying",
     whatClientSees: 'Mijoz nimani ko‘radi',
     openPageBtn: 'Sahifani ochish',
     linkActiveToggle: 'Link faol',
@@ -145,14 +144,22 @@ export const translations = {
     dayOffText: 'Dam olish kuni',
     editScheduleBtn: 'Tahrirlash',
 
-    // Notifications
-    serviceNotificationsTitle: 'Xizmat bildirishnomalari',
+    // Notifications & Push
+    serviceNotificationsTitle: 'Bildirishnomalar sozlamalari',
     dailyReminderToggle: 'Har kun ogohlantir',
-    dailyReminderHint: 'Ertalab soat 09:00 da',
+    dailyReminderHint: 'Ertalab soat 09:00 da (Toshkent vaqti)',
     aiModeToggle: 'AI rejimi',
     aiModeHint: "Ovozli xabar orqali tezkor bron yarating",
     clientSmsToggle: 'Mijozga eslatma',
     clientSmsHint: 'Bandlikdan 2 soat oldin mijozga avtomatik SMS',
+    pushEnableBtn: 'Bildirishnomalarni yoqish',
+    pushStatusGranted: 'Ruxsat berilgan',
+    pushStatusDenied: 'Rad etilgan',
+    pushActive: 'Faol',
+    pushInactive: 'Faol emas',
+    testPushBtn: 'Test bildirishnoma yuborish',
+    iosPwaHintTitle: 'iPhone foydalanuvchilari uchun',
+    iosPwaHintDesc: "Bildirishnoma olish uchun ilovani Bosh ekranga qo'shing («Ulashish» → «Bosh ekranga»)",
 
     // Language
     appLanguageTitle: 'Ilova tili',
@@ -165,15 +172,20 @@ export const translations = {
     biometricsLabel: 'Face ID / Touch ID',
     activeDevicesLabel: 'Aktiv qurilmalar',
     terminateDeviceBtn: 'Sessiyani tugatish',
+
+    // Network & Errors
+    offlineBanner: 'Internet yo‘q. Oxirgi maʼlumotlar ko‘rsatilmoqda.',
+    somethingWentWrong: 'Nimadir xato ketdi',
+    errorReload: 'Qayta yuklash',
   },
   ru: {
-    // Navigation Tabs (4 tabs, no Do'kon)
+    // Navigation Tabs (4 tabs)
     tabJadval: 'Расписание',
     tabAnalitika: 'Аналитика',
     tabPortfolio: 'Портфолио',
     tabProfil: 'Профиль',
 
-    // Onboarding (3 slides: Jadval, Daromad, Booking link)
+    // Onboarding (3 slides)
     skip: 'Пропустить',
     continue: 'Продолжить',
     onboardingSlide1Sub: 'РАСПИСАНИЕ',
@@ -188,11 +200,11 @@ export const translations = {
 
     // Auth
     welcomeTitle: 'Добро пожаловать!',
-    welcomeSub: 'Планируйте легко с нами и сделайте первый шаг к вашей цели!',
+    welcomeSub: 'Планируйте легко с Barbero и сделайте первый шаг к вашей цели!',
     phoneLabel: 'Номер телефона',
     submitPhone: 'Получить код',
     smsVerifyTitle: 'Подтвердите код из SMS!',
-    smsVerifySub: 'Мы отправили код подтверждения на номер +998 90 *** ** 02. Пожалуйста, введите его!',
+    smsVerifySub: 'Мы отправили код подтверждения на ваш номер. Пожалуйста, введите его!',
     timeLeft: 'Осталось времени:',
     codeNotReceived: 'Не пришел код:',
     getViaTelegram: 'Получить в Telegram',
@@ -260,11 +272,14 @@ export const translations = {
     endDateLabel: 'Окончание',
     cancelFilter: 'Отмена',
     applyFilter: 'Применить',
-    monthlyRevenueTitle: 'Месячный доход',
+    monthlyRevenueTitle: 'Доход',
     clientsMetricTitle: 'Клиенты',
     occupancyMetricTitle: 'Занятость',
     revenueDynamicsTitle: 'Динамика выручки',
     byMonths: 'По месяцам',
+    rangeErrorMsg: 'Дата начала не может быть позже даты окончания',
+    noDataYet: 'Пока нет данных',
+    retryBtn: 'Повторить попытку',
 
     // Portfolio
     portfolioTitle: 'Портфолио',
@@ -272,15 +287,11 @@ export const translations = {
     publicBadge: 'Публично',
 
     // Profile
-    premiumBannerTitle: 'Премиум подписка',
-    premiumValidUntil: 'до 4 Октября 2026',
     groupServices: 'Услуги',
     groupSettings: 'Настройки',
     serviceTypes: 'Виды услуг',
     bookingLink: 'Ссылка для записи',
     bookingRequests: 'Запросы на бронь',
-    mySubscriptions: 'Мои подписки',
-    buySubscription: 'Купить подписку',
     workingHours: 'Рабочее время',
     notifications: 'Уведомления',
     videoTutorials: 'Видеоуроки',
@@ -292,7 +303,7 @@ export const translations = {
     help: 'Помощь',
     legalDocs: 'Правовые документы',
     logout: 'Выйти',
-    versionText: 'версия 1.0.9',
+    versionText: 'Barbero • версия 1.0.9',
 
     // Booking Link Subscreen
     linkWorkingStatus: 'Ваша ссылка активна',
@@ -312,14 +323,22 @@ export const translations = {
     dayOffText: 'Выходной день',
     editScheduleBtn: 'Редактировать',
 
-    // Notifications
-    serviceNotificationsTitle: 'Уведомления об услугах',
+    // Notifications & Push
+    serviceNotificationsTitle: 'Настройки уведомлений',
     dailyReminderToggle: 'Ежедневное напоминание',
-    dailyReminderHint: 'Утром в 09:00',
+    dailyReminderHint: 'Утром в 09:00 (по Ташкенту)',
     aiModeToggle: 'AI режим',
     aiModeHint: 'Быстрая запись клиентов через голосовые сообщения',
     clientSmsToggle: 'Напоминание клиенту',
     clientSmsHint: 'Автоматическое SMS клиенту за 2 часа до записи',
+    pushEnableBtn: 'Включить push-уведомления',
+    pushStatusGranted: 'Разрешено',
+    pushStatusDenied: 'Отклонено',
+    pushActive: 'Активно',
+    pushInactive: 'Не активно',
+    testPushBtn: 'Отправить тестовое уведомление',
+    iosPwaHintTitle: 'Для пользователей iPhone',
+    iosPwaHintDesc: 'Чтобы получать уведомления, добавьте приложение на экран Домой («Поделиться» → «На экран Домой»)',
 
     // Language
     appLanguageTitle: 'Язык приложения',
@@ -332,6 +351,11 @@ export const translations = {
     biometricsLabel: 'Face ID / Touch ID',
     activeDevicesLabel: 'Активные устройства',
     terminateDeviceBtn: 'Завершить сессию',
+
+    // Network & Errors
+    offlineBanner: 'Нет интернета. Отображаются последние сохраненные данные.',
+    somethingWentWrong: 'Что-то пошло не так',
+    errorReload: 'Перезагрузить',
   },
 };
 
