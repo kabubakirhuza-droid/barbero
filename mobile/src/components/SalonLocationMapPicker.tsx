@@ -5,8 +5,9 @@ import {
   StyleSheet,
   TouchableOpacity,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
-import { MapPin, Navigation, Compass, CheckCircle2 } from 'lucide-react-native';
+import { MapPin, Navigation, Compass, CheckCircle2, Crosshair } from 'lucide-react-native';
 import { colors, COLOR_PRIMARY } from '../theme/theme';
 
 export interface Coords {
@@ -37,7 +38,38 @@ export const SalonLocationMapPicker: React.FC<SalonLocationMapPickerProps> = ({
   onCoordsChange,
   height = 240,
 }) => {
-  const [activeDistrict, setActiveDistrict] = useState<string>('Markaz');
+  const [activeDistrict, setActiveDistrict] = useState<string>('Yunusobod');
+  const [userGps, setUserGps] = useState<Coords | null>(null);
+  const [locating, setLocating] = useState<boolean>(false);
+
+  // Auto detect user GPS on mount
+  useEffect(() => {
+    detectUserGps(false);
+  }, []);
+
+  const detectUserGps = (moveMarker: boolean = true) => {
+    if (typeof navigator !== 'undefined' && navigator.geolocation) {
+      setLocating(true);
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const lat = Number(pos.coords.latitude.toFixed(6));
+          const lng = Number(pos.coords.longitude.toFixed(6));
+          setUserGps({ lat, lng });
+          setLocating(false);
+
+          if (moveMarker) {
+            setActiveDistrict('Mening joylashuvim');
+            onCoordsChange({ lat, lng }, 'Mening aniq joylashuvim');
+          }
+        },
+        (err) => {
+          console.warn('Geolocation error:', err.message);
+          setLocating(false);
+        },
+        { enableHighAccuracy: true, timeout: 8000 }
+      );
+    }
+  };
 
   useEffect(() => {
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
@@ -47,6 +79,8 @@ export const SalonLocationMapPicker: React.FC<SalonLocationMapPickerProps> = ({
           if (typeof lat === 'number' && typeof lng === 'number') {
             onCoordsChange({ lat: Number(lat.toFixed(6)), lng: Number(lng.toFixed(6)) });
           }
+        } else if (event.data && event.data.type === 'TRIGGER_GPS') {
+          detectUserGps(true);
         }
       };
       window.addEventListener('message', handleMessage);
@@ -85,6 +119,21 @@ export const SalonLocationMapPicker: React.FC<SalonLocationMapPickerProps> = ({
           70% { box-shadow: 0 0 0 12px rgba(166, 124, 46, 0); }
           100% { box-shadow: 0 0 0 0 rgba(166, 124, 46, 0); }
         }
+        .user-gps-dot {
+          background: #2563EB;
+          border: 3px solid #FFFFFF;
+          width: 20px;
+          height: 20px;
+          border-radius: 10px;
+          box-shadow: 0 0 0 6px rgba(37, 99, 235, 0.35);
+          cursor: pointer;
+          animation: gpsPulse 1.8s infinite;
+        }
+        @keyframes gpsPulse {
+          0% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.6); }
+          70% { box-shadow: 0 0 0 14px rgba(37, 99, 235, 0); }
+          100% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0); }
+        }
         .instruction-banner {
           position: absolute;
           bottom: 10px;
@@ -112,6 +161,21 @@ export const SalonLocationMapPicker: React.FC<SalonLocationMapPickerProps> = ({
           maxZoom: 19,
           attribution: '© OpenStreetMap'
         }).addTo(map);
+
+        ${
+          userGps
+            ? `
+        // User real GPS position dot
+        const userIcon = L.divIcon({
+          className: 'user-gps-dot',
+          iconSize: [20, 20],
+          iconAnchor: [10, 10]
+        });
+        const userMarker = L.marker([${userGps.lat}, ${userGps.lng}], { icon: userIcon }).addTo(map);
+        userMarker.bindPopup('<b>📍 Siz turgan joy (GPS)</b><br><a href="#" onclick="window.parent.postMessage({ type: \\'TRIGGER_GPS\\' }, \\'*\\'); return false;" style="color:#2563EB; font-weight:700; font-size:12px;">Sartaroshxonani shu yerga qo\\'yish</a>');
+        `
+            : ''
+        }
 
         const pinIcon = L.divIcon({
           className: 'salon-pin',
@@ -146,12 +210,13 @@ export const SalonLocationMapPicker: React.FC<SalonLocationMapPickerProps> = ({
 
   return (
     <View style={styles.container}>
-      {/* Quick District Presets */}
+      {/* Header and Coordinates */}
       <View style={styles.headerRow}>
         <View style={styles.headerTitleBox}>
           <Compass size={16} color={COLOR_PRIMARY} />
           <Text style={styles.headerTitle}>Xaritada joylashuv</Text>
         </View>
+
         <View style={styles.coordsBadge}>
           <MapPin size={12} color={COLOR_PRIMARY} />
           <Text style={styles.coordsText}>
@@ -160,7 +225,26 @@ export const SalonLocationMapPicker: React.FC<SalonLocationMapPickerProps> = ({
         </View>
       </View>
 
+      {/* District Presets and Current Location GPS Button */}
       <View style={styles.districtChips}>
+        <TouchableOpacity
+          style={[
+            styles.gpsLiveButton,
+            activeDistrict === 'Mening joylashuvim' && styles.gpsLiveButtonActive,
+          ]}
+          onPress={() => detectUserGps(true)}
+          activeOpacity={0.7}
+        >
+          {locating ? (
+            <ActivityIndicator size="small" color="#FFFFFF" />
+          ) : (
+            <Crosshair size={13} color="#FFFFFF" />
+          )}
+          <Text style={styles.gpsLiveButtonText}>
+            {locating ? 'Aniqlanmoqda...' : '🎯 Mening turgan joyim'}
+          </Text>
+        </TouchableOpacity>
+
         {DISTRICT_PRESETS.map((item) => {
           const isSelected = activeDistrict === item.name;
           return (
@@ -208,6 +292,19 @@ export const SalonLocationMapPicker: React.FC<SalonLocationMapPickerProps> = ({
             {address || 'Toshkent sh.'}
           </Text>
         </View>
+
+        {/* Quick GPS Floating Action Button on the Map */}
+        <TouchableOpacity
+          style={styles.floatingGpsBtn}
+          onPress={() => detectUserGps(true)}
+          activeOpacity={0.8}
+        >
+          {locating ? (
+            <ActivityIndicator size="small" color="#FFFFFF" />
+          ) : (
+            <Crosshair size={18} color="#FFFFFF" />
+          )}
+        </TouchableOpacity>
       </View>
     </View>
   );
@@ -261,13 +358,38 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 6,
+    alignItems: 'center',
+  },
+  gpsLiveButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#2563EB',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    shadowColor: '#2563EB',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  gpsLiveButtonActive: {
+    backgroundColor: '#1D4ED8',
+    borderWidth: 1.5,
+    borderColor: '#93C5FD',
+  },
+  gpsLiveButtonText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#FFFFFF',
   },
   districtChip: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingVertical: 6,
     borderRadius: 12,
     backgroundColor: colors.background,
     borderWidth: 1,
@@ -314,7 +436,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 10,
     left: 10,
-    maxWidth: '80%',
+    maxWidth: '75%',
     backgroundColor: 'rgba(26, 24, 21, 0.85)',
     flexDirection: 'row',
     alignItems: 'center',
@@ -328,5 +450,21 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     color: '#FFFFFF',
+  },
+  floatingGpsBtn: {
+    position: 'absolute',
+    bottom: 12,
+    right: 12,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#2563EB',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1000,
+    boxShadow: '0 4px 12px rgba(37, 99, 235, 0.4)',
+    elevation: 4,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
   },
 });
