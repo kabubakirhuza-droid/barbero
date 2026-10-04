@@ -14,10 +14,24 @@ import bookingRequestRoutes from './routes/bookingRequests';
 import pushRoutes from './routes/push';
 import reviewRoutes from './routes/reviews';
 
+import { pool, db } from './db';
+
 const app = express();
 
 app.use(cors());
 app.use(express.json());
+
+// Return JSON error for malformed JSON requests
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  if (err instanceof SyntaxError && 'body' in err) {
+    res.status(400).json({ error: "Noto'g'ri JSON formati" });
+    return;
+  }
+  next(err);
+});
+
+// Auto-initialize DB schema on startup
+db.initDb().catch((e) => console.warn('[DB AutoInit Notice]:', e.message));
 
 // Register API Routes under both / and /api for maximum compatibility
 const routes = [
@@ -46,7 +60,6 @@ import path from 'path';
 const distPath = path.resolve(__dirname, '../../mobile/dist');
 app.use(express.static(distPath));
 
-import { pool } from './db';
 import { isJwtReady, isGatewayReady, isVapidReady } from './config';
 
 // Health check endpoint

@@ -36,7 +36,7 @@ router.post('/', async (req: AuthRequest, res: Response): Promise<void> => {
       name: String(name).trim(),
       price: Number(price),
       duration: Number(duration) || 30,
-      badgeColor: badgeColor || '#A67C2E',
+      badgeColor: badgeColor || '#2563EB',
       isActive: isActive !== undefined ? Boolean(isActive) : true,
     };
 

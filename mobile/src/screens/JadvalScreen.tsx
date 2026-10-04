@@ -70,7 +70,7 @@ const generateDateStrip = (daysBefore = 7, daysAfter = 21) => {
 
 // 5 default services as specified in prompt v2
 const DEFAULT_SERVICES: Service[] = [
-  { id: 'srv-1', name: 'Soch olish', price: 50000, duration: 30, badgeColor: '#A67C2E', isActive: true },
+  { id: 'srv-1', name: 'Soch olish', price: 50000, duration: 30, badgeColor: '#2563EB', isActive: true },
   { id: 'srv-2', name: 'Soch + soqol', price: 70000, duration: 30, badgeColor: '#2563EB', isActive: true },
   { id: 'srv-3', name: 'Bolalar sochi', price: 30000, duration: 30, badgeColor: '#10B981', isActive: true },
   { id: 'srv-4', name: 'Soqol olish', price: 30000, duration: 30, badgeColor: '#F59E0B', isActive: true },

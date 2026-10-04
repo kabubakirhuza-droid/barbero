@@ -54,7 +54,7 @@ router.post('/quick', async (req: AuthRequest, res: Response): Promise<void> => 
       name: 'Soch olish',
       price: 50000,
       duration: 30,
-      badgeColor: '#A67C2E',
+      badgeColor: '#2563EB',
     };
 
     const nextOrderNumber = (await db.getAppointments(userId, date)).length + 1;
@@ -154,7 +154,7 @@ router.post('/', async (req: AuthRequest, res: Response): Promise<void> => {
       serviceId: serviceId || 'srv-1',
       serviceName: serviceName || 'Soch olish',
       servicePrice: finalPrice,
-      badgeColor: badgeColor || '#A67C2E',
+      badgeColor: badgeColor || '#2563EB',
       date,
       startTime,
       endTime,
@@ -186,22 +186,43 @@ router.put('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
       return;
     }
 
+    // Whitelist allowed fields to prevent arbitrary body injection
+    const allowedFields = [
+      'clientName',
+      'clientPhone',
+      'serviceId',
+      'serviceName',
+      'servicePrice',
+      'badgeColor',
+      'date',
+      'startTime',
+      'endTime',
+      'duration',
+      'status',
+      'notes',
+    ];
+
+    const safeUpdates: Record<string, any> = {};
+    for (const key of allowedFields) {
+      if (req.body[key] !== undefined) {
+        safeUpdates[key] = req.body[key];
+      }
+    }
+
     // If changing slot, verify no collision
-    if (req.body.date || req.body.startTime) {
-      const targetDate = req.body.date || current.date;
-      const targetTime = req.body.startTime || current.startTime;
+    if (safeUpdates.date || safeUpdates.startTime) {
+      const targetDate = safeUpdates.date || current.date;
+      const targetTime = safeUpdates.startTime || current.startTime;
       if (await db.hasActiveSlotConflict(userId, targetDate, targetTime, id)) {
         res.status(409).json({ error: "Ushbu vaqt oralig'i allaqachon band qilingan" });
         return;
       }
     }
 
-    const updated = await db.updateAppointment(id, userId, {
-      ...req.body,
-    });
+    const updated = await db.updateAppointment(id, userId, safeUpdates);
 
     // If client details updated, sync client entity
-    if (req.body.clientName || req.body.clientPhone) {
+    if (safeUpdates.clientName || safeUpdates.clientPhone) {
       if (updated?.clientPhone) {
         await db.createOrUpdateClient(userId, updated.clientName, updated.clientPhone, 0);
       }

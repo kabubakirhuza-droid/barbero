@@ -21,45 +21,131 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response): Prom
   }
 });
 
+// In-memory rate limiting map: ip -> { count, resetAt }, phone -> { count, resetAt }
+const ipRateLimits = new Map<string, { count: number; resetAt: number }>();
+const phoneRateLimits = new Map<string, { count: number; resetAt: number }>();
+
+function checkRateLimit(ip: string, phone: string): boolean {
+  const now = Date.now();
+
+  // IP limit: 5 req per minute
+  const ipEntry = ipRateLimits.get(ip);
+  if (ipEntry && ipEntry.resetAt > now) {
+    if (ipEntry.count >= 5) return false;
+    ipEntry.count++;
+  } else {
+    ipRateLimits.set(ip, { count: 1, resetAt: now + 60 * 1000 });
+  }
+
+  // Phone limit: 3 req per hour
+  const phoneEntry = phoneRateLimits.get(phone);
+  if (phoneEntry && phoneEntry.resetAt > now) {
+    if (phoneEntry.count >= 3) return false;
+    phoneEntry.count++;
+  } else {
+    phoneRateLimits.set(phone, { count: 1, resetAt: now + 3600 * 1000 });
+  }
+
+  return true;
+}
+
 // POST /booking-requests - Client submits request from public booking page
 router.post('/', async (req: Request, res: Response): Promise<void> => {
   try {
     const { masterId, clientName, clientPhone, serviceId, date, time } = req.body;
 
-    if (!clientName || !clientPhone || !serviceId || !date || !time) {
-      res.status(400).json({ error: "Barcha maydonlarni to'ldirish shart" });
+    if (!masterId || !clientName || !clientPhone || !serviceId || !date || !time) {
+      res.status(400).json({ error: "Barcha maydonlarni to'ldirish shart (masterId, clientName, clientPhone, serviceId, date, time)" });
       return;
     }
 
-    const targetMasterId = masterId || 'u-1';
-    const service = (await db.getServiceById(serviceId)) || {
-      id: serviceId || 'srv-1',
-      name: 'Soch turmagi',
-      price: 50000,
-      badgeColor: '#A67C2E',
-      duration: 30,
-    };
+    const trimmedName = String(clientName).trim();
+    if (trimmedName.length < 2) {
+      res.status(400).json({ error: "Mijoz ismi kamida 2 ta harfdan iborat bo'lishi kerak" });
+      return;
+    }
+
+    // Phone validation
+    let cleanPhone = String(clientPhone).replace(/\D/g, '');
+    if (cleanPhone.length === 9) cleanPhone = `998${cleanPhone}`;
+    if (!/^998\d{9}$/.test(cleanPhone)) {
+      res.status(400).json({ error: "Telefon raqami noto'g'ri. +998XXXXXXXXX formatida kiriting" });
+      return;
+    }
+    const formattedPhone = `+${cleanPhone}`;
+
+    // Date validation
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date))) {
+      res.status(400).json({ error: "Sana formati noto'g'ri (YYYY-MM-DD)" });
+      return;
+    }
+    const today = new Date().toISOString().split('T')[0];
+    if (String(date) < today) {
+      res.status(400).json({ error: "O'tgan sanaga yozilish mumkin emas" });
+      return;
+    }
+
+    // Time validation
+    if (!/^\d{2}:\d{2}$/.test(String(time))) {
+      res.status(400).json({ error: "Vaqt formati noto'g'ri (HH:MM)" });
+      return;
+    }
+    const [hours, mins] = String(time).split(':').map(Number);
+    if (hours < 7 || hours > 23 || mins < 0 || mins > 59) {
+      res.status(400).json({ error: "Kiritilgan vaqt ish vaqtidan tashqarida (07:00 - 23:00)" });
+      return;
+    }
+
+    // Rate limit check
+    const clientIp = req.ip || req.headers['x-forwarded-for'] || 'unknown';
+    if (!checkRateLimit(String(clientIp), formattedPhone)) {
+      res.status(429).json({ error: "Juda ko'p so'rov yuborildi. Iltimos, birozdan so'ng qayta urinib ko'ring" });
+      return;
+    }
+
+    // Verify master existence
+    let master = await db.getUserById(masterId);
+    if (!master) {
+      master = await db.getUserByUsername(masterId);
+    }
+    if (!master) {
+      res.status(404).json({ error: "Usta topilmadi" });
+      return;
+    }
+
+    // Verify service existence & ownership
+    const service = await db.getServiceById(serviceId);
+    if (!service || service.userId !== master.id) {
+      res.status(404).json({ error: "Tanlangan xizmat topilmadi yoki ustaga tegishli emas" });
+      return;
+    }
+
+    // Check slot availability
+    if (await db.hasActiveSlotConflict(master.id, String(date), String(time))) {
+      res.status(409).json({ error: "Ushbu vaqt oralig'ida allaqachon boshqa qabul mavjud" });
+      return;
+    }
 
     const newRequest: BookingRequest = {
       id: `req-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-      masterId: targetMasterId,
-      clientName: String(clientName).trim(),
-      clientPhone: String(clientPhone).trim(),
+      masterId: master.id,
+      clientName: trimmedName,
+      clientPhone: formattedPhone,
       serviceId: service.id,
       serviceName: service.name,
       servicePrice: service.price,
-      badgeColor: service.badgeColor || '#A67C2E',
-      date,
-      time,
+      badgeColor: service.badgeColor || '#2563EB',
+      date: String(date),
+      time: String(time),
       duration: service.duration || 30,
       status: 'pending',
     };
 
     const savedRequest = await db.createBookingRequest(newRequest);
 
-    // Send real Push Notification to master
+    // Send Push Notification to master
     try {
-      await pushService.sendNotificationToUser(targetMasterId, {
+      await pushService.sendNotificationToUser(master.id, {
         title: `Yangi so'rov: ${savedRequest.clientName}`,
         body: `${savedRequest.serviceName} • ${date}, soat ${time}`,
         tag: `booking-request-${savedRequest.id}`,
@@ -69,9 +155,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
           requestId: savedRequest.id,
         },
       });
-    } catch (pushErr) {
-      console.error('[BookingRequests] Push notification error:', pushErr);
-    }
+    } catch (_) {}
 
     res.status(201).json({
       success: true,
@@ -80,7 +164,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     });
   } catch (error) {
     console.error('[BookingRequests POST error]:', error);
-    res.status(500).json({ error: 'Soʻrovni yuborishda xatolik yuz berdi' });
+    res.status(500).json({ error: "So'rovni yuborishda xatolik yuz berdi" });
   }
 });
 
@@ -120,7 +204,7 @@ router.post('/:id/accept', authenticateToken, async (req: AuthRequest, res: Resp
       serviceId: request.serviceId,
       serviceName: request.serviceName,
       servicePrice: request.servicePrice,
-      badgeColor: request.badgeColor || '#A67C2E',
+      badgeColor: request.badgeColor || '#2563EB',
       date: request.date,
       startTime: request.time,
       endTime,

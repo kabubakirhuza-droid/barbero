@@ -100,7 +100,7 @@ export const SalonLocationMapPicker: React.FC<SalonLocationMapPickerProps> = ({
         body, html { margin: 0; padding: 0; height: 100%; width: 100%; background: #FBF8F4; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; overflow: hidden; }
         #map { height: 100%; width: 100%; }
         .salon-pin {
-          background: #A67C2E;
+          background: #2563EB;
           border: 3px solid #FFFFFF;
           color: white;
           width: 44px;
@@ -110,14 +110,14 @@ export const SalonLocationMapPicker: React.FC<SalonLocationMapPickerProps> = ({
           align-items: center;
           justify-content: center;
           font-size: 20px;
-          box-shadow: 0 6px 16px rgba(166, 124, 46, 0.45);
+          box-shadow: 0 6px 16px rgba(37, 99, 235, 0.45);
           cursor: grab;
           animation: pulsePin 2s infinite;
         }
         @keyframes pulsePin {
-          0% { box-shadow: 0 0 0 0 rgba(166, 124, 46, 0.5); }
-          70% { box-shadow: 0 0 0 12px rgba(166, 124, 46, 0); }
-          100% { box-shadow: 0 0 0 0 rgba(166, 124, 46, 0); }
+          0% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.5); }
+          70% { box-shadow: 0 0 0 12px rgba(37, 99, 235, 0); }
+          100% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0); }
         }
         .user-gps-dot {
           background: #2563EB;

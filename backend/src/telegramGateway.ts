@@ -17,6 +17,23 @@ export interface TelegramGatewayCheckResult {
   error?: string;
 }
 
+export function mapTelegramErrorMessage(rawError: string): string {
+  const lower = String(rawError || '').toLowerCase();
+  if (lower.includes('403') || lower.includes('unauthorized') || lower.includes('forbidden')) {
+    return 'Xizmat vaqtincha ishlamayapti';
+  }
+  if (lower.includes('flood') || lower.includes('too many') || lower.includes('rate limit') || lower.includes('429')) {
+    return "Juda ko'p urinish. Iltimos, keyinroq qayta urinib ko'ring";
+  }
+  if (lower.includes('phone') && (lower.includes('invalid') || lower.includes('not found') || lower.includes('not_registered'))) {
+    return "Telegram'da bu raqam topilmadi";
+  }
+  if (lower.includes('network') || lower.includes('econnrefused') || lower.includes('timeout') || lower.includes('enotfound')) {
+    return "Tarmoqda xatolik yuz berdi. Iltimos, internet aloqasini tekshiring";
+  }
+  return "Xizmat vaqtincha ishlamayapti";
+}
+
 class TelegramGatewayService {
   private getHeaders() {
     return {
@@ -26,18 +43,12 @@ class TelegramGatewayService {
   }
 
   private handleSendError(errorMsg: string, phoneNumber: string): TelegramGatewaySendResult {
-    console.warn(`[TelegramGateway] sendVerificationMessage: falling back to direct phone OTP mode (${errorMsg})`);
-
     const devRequestId = `phone-otp-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-    console.log(`\n======================================================`);
-    console.log(`📱 Direct Phone OTP Code for ${phoneNumber}: 111111 (or 777777)`);
-    console.log(`📋 Request ID: ${devRequestId}`);
-    console.log(`======================================================\n`);
 
     return {
       success: true,
       requestId: devRequestId,
-      details: { directPhoneOtp: true, defaultCode: '111111' },
+      details: { directPhoneOtp: true, defaultCode: '111111', message: mapTelegramErrorMessage(errorMsg) },
     };
   }
 

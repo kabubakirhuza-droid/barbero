@@ -187,13 +187,165 @@ export class Database {
         path.join(process.cwd(), 'backend/src/schema.sql'),
       ];
       const schemaPath = possiblePaths.find((p) => fs.existsSync(p));
+      let schemaSql = '';
       if (schemaPath) {
-        const schemaSql = fs.readFileSync(schemaPath, 'utf8');
-        await pool.query(schemaSql);
-        console.log('✅ [PostgreSQL] Database schema initialized and verified');
+        schemaSql = fs.readFileSync(schemaPath, 'utf8');
+      } else {
+        schemaSql = `
+          CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+          CREATE TABLE IF NOT EXISTS users (
+            id VARCHAR(64) PRIMARY KEY,
+            phone VARCHAR(20) NOT NULL UNIQUE,
+            ism VARCHAR(60) DEFAULT 'Master',
+            familiya VARCHAR(60) DEFAULT 'BarberPlan',
+            full_name VARCHAR(120) DEFAULT 'BarberPlan Master',
+            username VARCHAR(50) UNIQUE,
+            avatar_url TEXT,
+            bio TEXT,
+            role VARCHAR(20) DEFAULT 'MASTER',
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+            updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+          );
+          CREATE TABLE IF NOT EXISTS otp_requests (
+            phone VARCHAR(20) PRIMARY KEY,
+            request_id VARCHAR(100) NOT NULL,
+            attempts INTEGER DEFAULT 0,
+            last_sent_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+          );
+          CREATE TABLE IF NOT EXISTS salons (
+            id VARCHAR(64) PRIMARY KEY,
+            name VARCHAR(150) NOT NULL,
+            address TEXT NOT NULL,
+            latitude DOUBLE PRECISION NOT NULL,
+            longitude DOUBLE PRECISION NOT NULL,
+            created_by VARCHAR(64) REFERENCES users(id) ON DELETE SET NULL,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+          );
+          CREATE TABLE IF NOT EXISTS salon_members (
+            id VARCHAR(64) PRIMARY KEY,
+            salon_id VARCHAR(64) REFERENCES salons(id) ON DELETE CASCADE,
+            master_id VARCHAR(64) REFERENCES users(id) ON DELETE CASCADE,
+            role VARCHAR(20) DEFAULT 'member',
+            joined_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+            UNIQUE(salon_id, master_id)
+          );
+          CREATE TABLE IF NOT EXISTS services (
+            id VARCHAR(64) PRIMARY KEY,
+            user_id VARCHAR(64) REFERENCES users(id) ON DELETE CASCADE,
+            name VARCHAR(120) NOT NULL,
+            price INTEGER NOT NULL,
+            duration INTEGER NOT NULL DEFAULT 30,
+            badge_color VARCHAR(30) DEFAULT '#2563EB',
+            is_active BOOLEAN DEFAULT TRUE,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+            updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+          );
+          CREATE TABLE IF NOT EXISTS clients (
+            id VARCHAR(64) PRIMARY KEY,
+            user_id VARCHAR(64) REFERENCES users(id) ON DELETE CASCADE,
+            name VARCHAR(100) NOT NULL,
+            phone VARCHAR(20) NOT NULL,
+            notes TEXT,
+            total_spent INTEGER DEFAULT 0,
+            visits_count INTEGER DEFAULT 0,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+            updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+          );
+          CREATE TABLE IF NOT EXISTS appointments (
+            id VARCHAR(64) PRIMARY KEY,
+            user_id VARCHAR(64) REFERENCES users(id) ON DELETE CASCADE,
+            client_id VARCHAR(64) REFERENCES clients(id) ON DELETE SET NULL,
+            client_name VARCHAR(100) NOT NULL,
+            client_phone VARCHAR(20) DEFAULT '',
+            service_id VARCHAR(64),
+            service_name VARCHAR(120) NOT NULL,
+            service_price INTEGER NOT NULL,
+            badge_color VARCHAR(30) DEFAULT '#2563EB',
+            appointment_date VARCHAR(20) NOT NULL,
+            start_time VARCHAR(10) NOT NULL,
+            end_time VARCHAR(10) NOT NULL,
+            duration INTEGER NOT NULL DEFAULT 30,
+            status VARCHAR(20) DEFAULT 'confirmed',
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+            updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+          );
+          CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_active_slot 
+          ON appointments (user_id, appointment_date, start_time) 
+          WHERE status != 'cancelled';
+
+          CREATE TABLE IF NOT EXISTS booking_requests (
+            id VARCHAR(64) PRIMARY KEY,
+            master_id VARCHAR(64) REFERENCES users(id) ON DELETE CASCADE,
+            client_name VARCHAR(100) NOT NULL,
+            client_phone VARCHAR(20) NOT NULL,
+            service_id VARCHAR(64) REFERENCES services(id) ON DELETE SET NULL,
+            service_name VARCHAR(120),
+            service_price INTEGER,
+            badge_color VARCHAR(30),
+            appointment_date VARCHAR(20) NOT NULL,
+            start_time VARCHAR(10) NOT NULL,
+            duration INTEGER DEFAULT 30,
+            status VARCHAR(20) DEFAULT 'pending',
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+          );
+          CREATE TABLE IF NOT EXISTS working_hours (
+            id VARCHAR(64) PRIMARY KEY,
+            user_id VARCHAR(64) REFERENCES users(id) ON DELETE CASCADE,
+            day_of_week VARCHAR(20) NOT NULL,
+            day_index INTEGER NOT NULL,
+            is_working BOOLEAN DEFAULT TRUE,
+            start_time VARCHAR(10) DEFAULT '09:00',
+            end_time VARCHAR(10) DEFAULT '21:00',
+            lunch_start VARCHAR(10) DEFAULT '13:00',
+            lunch_end VARCHAR(10) DEFAULT '14:00',
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+          );
+          CREATE TABLE IF NOT EXISTS portfolio_photos (
+            id VARCHAR(64) PRIMARY KEY,
+            user_id VARCHAR(64) REFERENCES users(id) ON DELETE CASCADE,
+            image_url TEXT NOT NULL,
+            caption VARCHAR(255),
+            likes_count INTEGER DEFAULT 0,
+            is_public BOOLEAN DEFAULT TRUE,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+          );
+          CREATE TABLE IF NOT EXISTS user_settings (
+            user_id VARCHAR(64) PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+            booking_link_active BOOLEAN DEFAULT TRUE,
+            allow_custom_time_request BOOLEAN DEFAULT FALSE,
+            allow_lunch_time_booking BOOLEAN DEFAULT FALSE,
+            daily_reminder_active BOOLEAN DEFAULT TRUE,
+            daily_reminder_time VARCHAR(10) DEFAULT '09:00',
+            client_sms_reminder_active BOOLEAN DEFAULT TRUE,
+            theme VARCHAR(20) DEFAULT 'system',
+            app_language VARCHAR(10) DEFAULT 'uz',
+            security_pin VARCHAR(4),
+            biometrics_enabled BOOLEAN DEFAULT FALSE
+          );
+          CREATE TABLE IF NOT EXISTS push_subscriptions (
+            id VARCHAR(64) PRIMARY KEY,
+            user_id VARCHAR(64) REFERENCES users(id) ON DELETE CASCADE,
+            endpoint TEXT NOT NULL UNIQUE,
+            p256dh TEXT NOT NULL,
+            auth TEXT NOT NULL,
+            device VARCHAR(150),
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+          );
+          CREATE TABLE IF NOT EXISTS reviews (
+            id VARCHAR(64) PRIMARY KEY,
+            master_id VARCHAR(64) REFERENCES users(id) ON DELETE CASCADE,
+            client_name VARCHAR(100) NOT NULL,
+            rating INTEGER NOT NULL DEFAULT 5,
+            comment TEXT,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+          );
+        `;
       }
 
-      // Safe schema adjustments for seamless client booking & flexible services
+      await pool.query(schemaSql);
+
+      // Safe schema adjustments
       try {
         await pool.query(`
           ALTER TABLE appointments ALTER COLUMN client_phone DROP NOT NULL;
@@ -203,6 +355,7 @@ export class Database {
       } catch (_) {}
 
       this.isInitialized = true;
+      console.log('✅ [PostgreSQL] Database schema initialized and verified');
     } catch (error: any) {
       console.warn('⚠️ [PostgreSQL] Schema init notice:', error.message);
       if (isProduction && !config.databaseUrl) {
@@ -271,7 +424,7 @@ export class Database {
         const srvCheck = await this.query('SELECT id FROM services WHERE user_id = $1 LIMIT 1', [user.id]);
         if (srvCheck.rows.length === 0) {
           const defaultServices = [
-            { name: 'Soch olish', price: 50000, color: '#A67C2E' },
+            { name: 'Soch olish', price: 50000, color: '#2563EB' },
             { name: 'Soch + soqol', price: 70000, color: '#2563EB' },
             { name: 'Bolalar sochi', price: 30000, color: '#10B981' },
             { name: 'Soqol olish', price: 30000, color: '#F59E0B' },
@@ -440,7 +593,7 @@ export class Database {
         service.name,
         service.price,
         service.duration || 30,
-        service.badgeColor || '#A67C2E',
+        service.badgeColor || '#2563EB',
         service.isActive !== false,
       ]
     );
@@ -480,7 +633,7 @@ export class Database {
       name: row.name,
       price: Number(row.price),
       duration: Number(row.duration || 30),
-      badgeColor: row.badge_color || '#A67C2E',
+      badgeColor: row.badge_color || '#2563EB',
       isActive: Boolean(row.is_active),
     };
   }
@@ -669,7 +822,7 @@ export class Database {
           validServiceId,
           apt.serviceName || 'Soch olish',
           apt.servicePrice || 50000,
-          apt.badgeColor || '#A67C2E',
+          apt.badgeColor || '#2563EB',
           apt.date,
           apt.startTime,
           apt.endTime || apt.startTime,
@@ -773,7 +926,7 @@ export class Database {
       serviceId: row.service_id,
       serviceName: row.service_name,
       servicePrice: Number(row.service_price),
-      badgeColor: row.badge_color || '#A67C2E',
+      badgeColor: row.badge_color || '#2563EB',
       date: row.appointment_date,
       startTime: row.start_time,
       endTime: row.end_time || row.start_time,
@@ -815,7 +968,7 @@ export class Database {
         req.serviceId,
         req.serviceName,
         req.servicePrice,
-        req.badgeColor || '#A67C2E',
+        req.badgeColor || '#2563EB',
         req.date,
         req.time,
         req.duration || 30,
@@ -843,7 +996,7 @@ export class Database {
       serviceId: row.service_id,
       serviceName: row.service_name || '',
       servicePrice: Number(row.service_price || 0),
-      badgeColor: row.badge_color || '#A67C2E',
+      badgeColor: row.badge_color || '#2563EB',
       date: row.appointment_date,
       time: row.start_time,
       duration: Number(row.duration || 30),

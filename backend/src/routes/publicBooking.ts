@@ -3,6 +3,52 @@ import { db, Appointment } from '../db';
 
 const router = Router();
 
+// In-memory rate-limit trackers for public booking endpoints
+const ipRequestHistory = new Map<string, number[]>();
+const phoneRequestHistory = new Map<string, number[]>();
+
+function checkRateLimit(ip: string, phone: string): { allowed: boolean; message?: string } {
+  const now = Date.now();
+  const oneMinuteAgo = now - 60 * 1000;
+  const oneHourAgo = now - 60 * 60 * 1000;
+
+  // Check IP limit: max 5 requests per minute
+  const ipTimestamps = (ipRequestHistory.get(ip) || []).filter((t) => t > oneMinuteAgo);
+  if (ipTimestamps.length >= 5) {
+    return {
+      allowed: false,
+      message: "Juda ko'p so'rov yuborildi. Iltimos, 1 daqiqa kutib qayta urinib ko'ring (IP limit: 5/daq)",
+    };
+  }
+  ipTimestamps.push(now);
+  ipRequestHistory.set(ip, ipTimestamps);
+
+  // Check phone limit: max 3 requests per hour
+  const cleanPhone = phone.replace(/\D/g, '');
+  if (cleanPhone) {
+    const phoneTimestamps = (phoneRequestHistory.get(cleanPhone) || []).filter((t) => t > oneHourAgo);
+    if (phoneTimestamps.length >= 3) {
+      return {
+        allowed: false,
+        message: "Ushbu raqam orqali juda ko'p ariza yuborilgan. Iltimos, 1 soatdan so'ng urinib ko'ring (Limit: 3/soat)",
+      };
+    }
+    phoneTimestamps.push(now);
+    phoneRequestHistory.set(cleanPhone, phoneTimestamps);
+  }
+
+  return { allowed: true };
+}
+
+// Helper to normalize and validate Uzbekistan phone
+function normalizePhone(raw: string): string {
+  let digits = String(raw || '').replace(/\D/g, '');
+  if (digits.length === 9) {
+    digits = `998${digits}`;
+  }
+  return `+${digits}`;
+}
+
 // GET /public/b/:username - Info for public booking page
 router.get('/b/:username', async (req: Request, res: Response): Promise<void> => {
   try {
@@ -96,6 +142,7 @@ router.get('/b/:username/available-slots', async (req: Request, res: Response): 
 // POST /public/b/:username/book - Submit booking from client
 router.post('/b/:username/book', async (req: Request, res: Response): Promise<void> => {
   try {
+    const clientIp = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || 'unknown';
     const { username } = req.params;
     let master = await db.getUserByUsername(username);
     if (!master) {
@@ -114,14 +161,42 @@ router.post('/b/:username/book', async (req: Request, res: Response): Promise<vo
       return;
     }
 
-    let service = await db.getServiceById(serviceId);
-    if (!service) {
-      const masterServices = await db.getServices(master.id);
-      service = masterServices[0];
+    // Strict phone validation (+998XXXXXXXXX)
+    const normalizedPhone = normalizePhone(clientPhone);
+    if (!/^\+998\d{9}$/.test(normalizedPhone)) {
+      res.status(400).json({ error: "Telefon raqami noto'g'ri. +998XXXXXXXXX formatida kiriting (masalan, +998901234567)" });
+      return;
     }
 
-    if (!service) {
-      res.status(400).json({ error: 'Tanlangan xizmat topilmadi' });
+    // Rate limiting
+    const rateCheck = checkRateLimit(clientIp, normalizedPhone);
+    if (!rateCheck.allowed) {
+      res.status(429).json({ error: rateCheck.message });
+      return;
+    }
+
+    // Strict date format (YYYY-MM-DD) and not in past
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      res.status(400).json({ error: "Sana formati noto'g'ri (YYYY-MM-DD)" });
+      return;
+    }
+
+    const todayStr = new Date().toISOString().split('T')[0];
+    if (date < todayStr) {
+      res.status(400).json({ error: "O'tib ketgan sanaga yozilish mumkin emas" });
+      return;
+    }
+
+    // Strict time format (HH:MM)
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(startTime)) {
+      res.status(400).json({ error: "Vaqt formati noto'g'ri (HH:MM)" });
+      return;
+    }
+
+    // Verify service belongs to this master
+    const service = await db.getServiceById(serviceId);
+    if (!service || service.userId !== master.id) {
+      res.status(404).json({ error: "Tanlangan xizmat ushbu ustaga tegishli emas yoki topilmadi" });
       return;
     }
 
@@ -131,7 +206,7 @@ router.post('/b/:username/book', async (req: Request, res: Response): Promise<vo
       return;
     }
 
-    const client = await db.createOrUpdateClient(master.id, String(clientName).trim(), String(clientPhone).trim(), service.price);
+    const client = await db.createOrUpdateClient(master.id, String(clientName).trim(), normalizedPhone, service.price);
 
     // Calculate endTime
     const [h, m] = startTime.split(':').map(Number);
@@ -143,11 +218,11 @@ router.post('/b/:username/book', async (req: Request, res: Response): Promise<vo
       userId: master.id,
       clientId: client.id,
       clientName: String(clientName).trim(),
-      clientPhone: String(clientPhone).trim(),
+      clientPhone: normalizedPhone,
       serviceId: service.id,
       serviceName: service.name,
       servicePrice: service.price,
-      badgeColor: service.badgeColor || '#A67C2E',
+      badgeColor: service.badgeColor || '#2563EB',
       date,
       startTime,
       endTime,
@@ -156,8 +231,6 @@ router.post('/b/:username/book', async (req: Request, res: Response): Promise<vo
     };
 
     await db.createAppointment(newAppointment);
-
-    console.log(`[PublicBooking] New appointment booked for master ${master.fullName} by ${clientName} on ${date} at ${startTime}`);
 
     res.status(201).json({
       success: true,
@@ -175,3 +248,4 @@ router.post('/b/:username/book', async (req: Request, res: Response): Promise<vo
 });
 
 export default router;
+

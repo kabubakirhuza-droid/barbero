@@ -43,8 +43,6 @@ router.post('/send-code', async (req: Request, res: Response): Promise<void> => 
       return;
     }
 
-    console.log(`[TelegramGateway] Sending verification code to ${cleanPhone}...`);
-
     // Call real Telegram Gateway API
     const result = await telegramGateway.sendVerificationMessage(cleanPhone);
 
@@ -57,8 +55,6 @@ router.post('/send-code', async (req: Request, res: Response): Promise<void> => 
 
     // Save session persistently in DB
     await db.saveOtpSession(cleanPhone, result.requestId);
-
-    console.log(`[TelegramGateway] Code sent via Telegram Gateway! RequestId: ${result.requestId}`);
 
     res.json({
       success: true,
@@ -109,10 +105,6 @@ router.post('/verify', async (req: Request, res: Response): Promise<void> => {
       });
       return;
     }
-
-    console.log(
-      `[TelegramGateway] Checking code for requestId ${session.requestId} (attempt ${session.attempts + 1}/${config.maxVerificationAttempts})...`
-    );
 
     // Strictly verify via Telegram Gateway API
     const checkResult = await telegramGateway.checkVerificationStatus(session.requestId, cleanCode);

@@ -41,7 +41,17 @@ router.put('/', async (req: AuthRequest, res: Response): Promise<void> => {
     if (req.body.fullName) updates.fullName = String(req.body.fullName).trim();
     if (req.body.bio !== undefined) updates.bio = String(req.body.bio);
     if (req.body.avatarUrl) updates.avatarUrl = String(req.body.avatarUrl);
-    if (req.body.username) updates.username = String(req.body.username).toLowerCase().replace(/[^a-z0-9_]/g, '');
+    if (req.body.username) {
+      const cleanUsername = String(req.body.username).toLowerCase().replace(/[^a-z0-9_]/g, '');
+      if (cleanUsername) {
+        const existing = await db.getUserByUsername(cleanUsername);
+        if (existing && existing.id !== userId) {
+          res.status(409).json({ error: 'Bu nom band' });
+          return;
+        }
+        updates.username = cleanUsername;
+      }
+    }
 
     const updated = await db.updateUser(userId, updates);
     res.json({ success: true, user: updated });

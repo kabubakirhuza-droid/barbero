@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Modal,
   View,
@@ -8,12 +8,12 @@ import {
   TouchableOpacity,
   TextInput,
   Platform,
-  Alert,
+  ActivityIndicator,
 } from 'react-native';
-import { X, Check, Clock, ShieldCheck, MapPin, Phone, User as UserIcon, Star } from 'lucide-react-native';
+import { X, Check, Clock, ShieldCheck, MapPin, Phone, User as UserIcon, Star, Calendar } from 'lucide-react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors, COLOR_PRIMARY } from '../theme/theme';
 import { Button } from '../components/Button';
-import { BarberoLogo } from '../components/BarberoLogo';
 import { api } from '../api/apiClient';
 import { APP_BASE_URL } from '../config/appConfig';
 import { showAlert } from '../utils/alerts';
@@ -25,9 +25,18 @@ interface PublicBookingPreviewModalProps {
   masterUsername?: string;
 }
 
-interface TimeGroup {
-  title: string;
-  slots: string[];
+interface ServiceItem {
+  id: string;
+  name: string;
+  price: number;
+  duration?: number | string;
+  description?: string;
+  isActive?: boolean;
+}
+
+interface TimeSlot {
+  time: string;
+  isAvailable: boolean;
 }
 
 export const PublicBookingPreviewModal: React.FC<PublicBookingPreviewModalProps> = ({
@@ -35,116 +44,158 @@ export const PublicBookingPreviewModal: React.FC<PublicBookingPreviewModalProps>
   onClose,
   masterUsername = 'bobur',
 }) => {
-  const [selectedServiceId, setSelectedServiceId] = useState('srv-1');
+  const [masterInfo, setMasterInfo] = useState<any>(null);
+  const [services, setServices] = useState<ServiceItem[]>([]);
+  const [selectedServiceId, setSelectedServiceId] = useState<string>('');
   const [selectedDateIndex, setSelectedDateIndex] = useState(0);
-  const [selectedTime, setSelectedTime] = useState('15:00');
+  const [selectedTime, setSelectedTime] = useState<string>('');
+  const [availableSlots, setAvailableSlots] = useState<TimeSlot[]>([]);
+  const [isLoadingSlots, setIsLoadingSlots] = useState(false);
+  const [isLoadingMaster, setIsLoadingMaster] = useState(false);
+  
   const [clientName, setClientName] = useState('');
+  const [rawPhone, setRawPhone] = useState('');
   const [isReviewsModalOpen, setIsReviewsModalOpen] = useState(false);
   const [ratingStats, setRatingStats] = useState({ rating: 4.9, count: 18 });
-
-  useEffect(() => {
-    if (visible && masterUsername) {
-      api.getReviews(masterUsername).then(res => {
-        if (res) {
-          setRatingStats({
-            rating: res.avgRating || 4.9,
-            count: res.count || 18,
-          });
-        }
-      }).catch(() => {});
-    }
-  }, [visible, masterUsername]);
-  const [rawPhone, setRawPhone] = useState('901234567');
   const [isSuccess, setIsSuccess] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const datesList = [
-    { label: '29-sentyabr', iso: '2026-09-29' },
-    { label: '30-sentyabr', iso: '2026-09-30' },
-    { label: '1-oktabr', iso: '2026-10-01' },
-    { label: '2-oktabr', iso: '2026-10-02' },
-    { label: '3-oktabr', iso: '2026-10-03' },
-    { label: '4-oktabr', iso: '2026-10-04' },
-    { label: '5-oktabr', iso: '2026-10-05' },
-  ];
+  // Generate real upcoming dates starting from today
+  const datesList = React.useMemo(() => {
+    const list: { label: string; iso: string }[] = [];
+    const months = [
+      'yanvar', 'fevral', 'mart', 'aprel', 'may', 'iyun',
+      'iyul', 'avgust', 'sentyabr', 'oktabr', 'noyabr', 'dekabr'
+    ];
+    const now = new Date();
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + i);
+      const day = d.getDate();
+      const month = months[d.getMonth()];
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(day).padStart(2, '0');
+      list.push({
+        label: i === 0 ? 'Bugun' : i === 1 ? 'Ertaga' : `${day}-${month}`,
+        iso: `${yyyy}-${mm}-${dd}`,
+      });
+    }
+    return list;
+  }, []);
 
-  const timeGroups: TimeGroup[] = [
-    {
-      title: 'Ertalab',
-      slots: ['09:00', '09:30', '10:00', '10:30', '11:00', '11:30'],
-    },
-    {
-      title: 'Kunduzi',
-      slots: [
-        '12:00',
-        '12:30',
-        '13:00',
-        '13:30',
-        '14:00',
-        '14:30',
-        '15:00',
-        '15:30',
-        '16:00',
-        '16:30',
-      ],
-    },
-    {
-      title: 'Kechqurun',
-      slots: [
-        '17:00',
-        '17:30',
-        '18:00',
-        '18:30',
-        '19:00',
-        '19:30',
-        '20:00',
-        '20:30',
-      ],
-    },
-  ];
+  const selectedDateObj = datesList[selectedDateIndex] || datesList[0];
 
-  const services = [
-    {
-      id: 'srv-1',
-      name: 'Soch olish',
-      price: 50000,
-      duration: '30 min',
-      desc: 'Zamonaviy soch turmagi va yuvish',
-    },
-    {
-      id: 'srv-2',
-      name: 'Soch + soqol',
-      price: 70000,
-      duration: '45 min',
-      desc: 'Kompleks xizmat: soch, soqol konturi va parvarish',
-    },
-    {
-      id: 'srv-3',
-      name: 'Bolalar sochi',
-      price: 30000,
-      duration: '25 min',
-      desc: 'Bolalar uchun qulay va tezkor soch turmagi',
-    },
-    {
-      id: 'srv-4',
-      name: 'Soqol olish',
-      price: 30000,
-      duration: '20 min',
-      desc: 'Soqol tekislash va kontur',
-    },
-    {
-      id: 'srv-5',
-      name: 'Kreativ soqol tekislash',
-      price: 45000,
-      duration: '30 min',
-      desc: 'Maxsus dizayn va soqol parvarishi',
-    },
-  ];
+  // Prefill client profile if saved in AsyncStorage
+  useEffect(() => {
+    const initClientInfo = async () => {
+      try {
+        const savedName = await AsyncStorage.getItem('barberplan_client_name');
+        const savedPhone = await AsyncStorage.getItem('barberplan_client_phone');
+        if (savedName) setClientName(savedName);
+        if (savedPhone) {
+          const clean = savedPhone.replace(/\D/g, '');
+          setRawPhone(clean.startsWith('998') ? clean.slice(3) : clean);
+        }
+      } catch (e) {}
+    };
+    if (visible) {
+      initClientInfo();
+    }
+  }, [visible]);
+
+  // Load Master and Services dynamically
+  useEffect(() => {
+    if (visible && masterUsername) {
+      setIsLoadingMaster(true);
+      api.getPublicMasterInfo(masterUsername)
+        .then((data) => {
+          if (data && data.master) {
+            setMasterInfo(data.master);
+          }
+          if (data && Array.isArray(data.services) && data.services.length > 0) {
+            setServices(data.services);
+            setSelectedServiceId(data.services[0].id);
+          } else {
+            // Fallback default service
+            const defaultSrv = {
+              id: 'srv-default',
+              name: 'Soch olish',
+              price: 50000,
+              duration: 30,
+              description: 'Zamonaviy soch turmagi va parvarish',
+            };
+            setServices([defaultSrv]);
+            setSelectedServiceId(defaultSrv.id);
+          }
+        })
+        .catch(() => {
+          // Graceful fallback
+          setServices([
+            {
+              id: 'srv-1',
+              name: 'Soch olish',
+              price: 50000,
+              duration: 30,
+              description: 'Zamonaviy soch turmagi va parvarish',
+            },
+          ]);
+          setSelectedServiceId('srv-1');
+        })
+        .finally(() => {
+          setIsLoadingMaster(false);
+        });
+
+      // Reviews
+      api.getReviews(masterUsername)
+        .then((res) => {
+          if (res) {
+            setRatingStats({
+              rating: res.avgRating || 4.9,
+              count: res.count || 18,
+            });
+          }
+        })
+        .catch(() => {});
+    }
+  }, [visible, masterUsername]);
+
+  // Fetch real available slots for the selected date
+  const loadSlots = useCallback(async () => {
+    if (!masterUsername || !selectedDateObj) return;
+    setIsLoadingSlots(true);
+    try {
+      const res = await api.getPublicAvailableSlots(masterUsername, selectedDateObj.iso);
+      if (res && Array.isArray(res.slots)) {
+        setAvailableSlots(res.slots);
+        // Find first available slot
+        const firstAvail = res.slots.find((s) => s.isAvailable);
+        if (firstAvail) {
+          setSelectedTime(firstAvail.time);
+        } else {
+          setSelectedTime('');
+        }
+      }
+    } catch (e) {
+      // Fallback base slots
+      const baseTimes = [
+        '09:00', '10:00', '11:00', '12:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00'
+      ];
+      const slots = baseTimes.map((t) => ({ time: t, isAvailable: true }));
+      setAvailableSlots(slots);
+      setSelectedTime(slots[0]?.time || '10:00');
+    } finally {
+      setIsLoadingSlots(false);
+    }
+  }, [masterUsername, selectedDateObj]);
+
+  useEffect(() => {
+    if (visible) {
+      loadSlots();
+    }
+  }, [visible, selectedDateIndex, loadSlots]);
 
   const formatPhoneInput = (text: string) => {
-    // Strip everything non-numeric
     let digits = text.replace(/\D/g, '');
-    // If text starts with 998, strip it so user only types 9 digits
     if (digits.startsWith('998')) {
       digits = digits.slice(3);
     }
@@ -164,10 +215,6 @@ export const PublicBookingPreviewModal: React.FC<PublicBookingPreviewModalProps>
     return res;
   };
 
-  const fullPhoneE164 = `+998${rawPhone}`;
-
-  const selectedDateObj = datesList[selectedDateIndex] || datesList[0];
-
   const handleBook = async () => {
     if (!clientName.trim()) {
       showAlert('Xatolik', 'Iltimos, ismingizni kiriting');
@@ -177,44 +224,29 @@ export const PublicBookingPreviewModal: React.FC<PublicBookingPreviewModalProps>
       showAlert('Xatolik', "Iltimos, to'liq telefon raqamingizni kiriting (+998 XX XXX XX XX)");
       return;
     }
+    if (!selectedTime) {
+      showAlert('Xatolik', 'Iltimos, qabul vaqtini tanlang');
+      return;
+    }
 
     try {
       setIsSubmitting(true);
       const chosenService =
         services.find((s) => s.id === selectedServiceId) || services[0];
 
-      // 1. Post to backend booking endpoint
-      try {
-        await fetch(`http://127.0.0.1:5000/public/b/${masterUsername}/book`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            clientName: clientName.trim(),
-            clientPhone: getFormattedPhoneDisplay(),
-            serviceId: chosenService.id,
-            date: selectedDateObj.iso,
-            startTime: selectedTime,
-          }),
-        });
-      } catch (e) {
-        // Also register in direct appointments as fallback
-      }
+      const fullPhone = `+998${rawPhone}`;
 
-      // Also create appointment directly
-      try {
-        await api.createAppointment({
-          clientName: clientName.trim(),
-          clientPhone: getFormattedPhoneDisplay(),
-          serviceId: chosenService.id,
-          serviceName: chosenService.name,
-          servicePrice: chosenService.price,
-          badgeColor: COLOR_PRIMARY,
-          date: selectedDateObj.iso,
-          startTime: selectedTime,
-          duration: 30,
-          status: 'confirmed',
-        });
-      } catch (e) {}
+      // Persist client details for future bookings
+      await AsyncStorage.setItem('barberplan_client_name', clientName.trim());
+      await AsyncStorage.setItem('barberplan_client_phone', fullPhone);
+
+      await api.bookPublicSlot(masterUsername, {
+        clientName: clientName.trim(),
+        clientPhone: fullPhone,
+        serviceId: chosenService.id,
+        date: selectedDateObj.iso,
+        startTime: selectedTime,
+      });
 
       setIsSuccess(true);
     } catch (e: any) {
@@ -224,6 +256,19 @@ export const PublicBookingPreviewModal: React.FC<PublicBookingPreviewModalProps>
     }
   };
 
+  const morningSlots = availableSlots.filter((s) => {
+    const h = parseInt(s.time.split(':')[0], 10);
+    return h < 12;
+  });
+  const afternoonSlots = availableSlots.filter((s) => {
+    const h = parseInt(s.time.split(':')[0], 10);
+    return h >= 12 && h < 17;
+  });
+  const eveningSlots = availableSlots.filter((s) => {
+    const h = parseInt(s.time.split(':')[0], 10);
+    return h >= 17;
+  });
+
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
       <View style={styles.container}>
@@ -232,7 +277,12 @@ export const PublicBookingPreviewModal: React.FC<PublicBookingPreviewModalProps>
           <View style={styles.urlPill}>
             <Text style={styles.urlText}>🔒 {APP_BASE_URL}/b/{masterUsername}</Text>
           </View>
-          <TouchableOpacity onPress={onClose} style={styles.closeBtn} activeOpacity={0.7}>
+          <TouchableOpacity
+            accessibilityLabel="Yopish"
+            onPress={onClose}
+            style={styles.closeBtn}
+            activeOpacity={0.7}
+          >
             <X size={20} color={colors.textPrimary} />
           </TouchableOpacity>
         </View>
@@ -263,17 +313,19 @@ export const PublicBookingPreviewModal: React.FC<PublicBookingPreviewModalProps>
             contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}
           >
-            {/* Master Profile Card with Barbero Branding */}
+            {/* Master Profile Card */}
             <View style={styles.profileCard}>
               <View style={styles.avatar}>
-                <Text style={styles.avatarText}>B</Text>
+                <Text style={styles.avatarText}>
+                  {masterInfo?.name?.charAt(0)?.toUpperCase() || 'U'}
+                </Text>
               </View>
               <View style={styles.profileInfo}>
                 <View style={styles.verifiedRow}>
-                  <Text style={styles.masterName}>Bobur Aliyev</Text>
+                  <Text style={styles.masterName}>{masterInfo?.name || 'Bobur Aliyev'}</Text>
                   <ShieldCheck size={18} color={COLOR_PRIMARY} />
                 </View>
-                <Text style={styles.masterBio}>Barber & Erkaklar stilisti</Text>
+                <Text style={styles.masterBio}>{masterInfo?.bio || 'Barber & Erkaklar stilisti'}</Text>
                 <View style={styles.locationRow}>
                   <MapPin size={13} color={colors.textSecondary} />
                   <Text style={styles.locationText}>Toshkent sh., Chilonzor</Text>
@@ -294,40 +346,48 @@ export const PublicBookingPreviewModal: React.FC<PublicBookingPreviewModalProps>
             {/* Schedule Info */}
             <View style={styles.scheduleInfoPill}>
               <Clock size={16} color={COLOR_PRIMARY} />
-              <Text style={styles.scheduleInfoText}>Dush – Shan 09:00 – 21:00</Text>
+              <Text style={styles.scheduleInfoText}>
+                {masterInfo?.workingDays || 'Dush – Shan 09:00 – 21:00'}
+              </Text>
             </View>
 
             {/* Step 1: Select Service */}
             <Text style={styles.sectionTitle}>1. Xizmatni tanlang</Text>
-            <View style={styles.servicesList}>
-              {services.map((srv) => {
-                const isSelected = selectedServiceId === srv.id;
-                return (
-                  <TouchableOpacity
-                    key={srv.id}
-                    style={[styles.serviceCard, isSelected && styles.serviceCardActive]}
-                    onPress={() => setSelectedServiceId(srv.id)}
-                    activeOpacity={0.8}
-                  >
-                    <View style={styles.serviceMeta}>
-                      <Text style={styles.serviceName}>{srv.name}</Text>
-                      <Text style={styles.serviceDesc}>{srv.desc}</Text>
-                      <Text style={styles.serviceDuration}>⏱ {srv.duration}</Text>
-                    </View>
-                    <View style={styles.servicePriceCol}>
-                      <Text style={styles.servicePriceText}>
-                        {srv.price.toLocaleString('uz-UZ')} uzs
-                      </Text>
-                      <View style={[styles.selectRadio, isSelected && styles.selectRadioActive]}>
-                        {isSelected && <View style={styles.radioDot} />}
+            {isLoadingMaster ? (
+              <ActivityIndicator size="small" color={COLOR_PRIMARY} style={{ marginVertical: 12 }} />
+            ) : (
+              <View style={styles.servicesList}>
+                {services.map((srv) => {
+                  const isSelected = selectedServiceId === srv.id;
+                  return (
+                    <TouchableOpacity
+                      key={srv.id}
+                      style={[styles.serviceCard, isSelected && styles.serviceCardActive]}
+                      onPress={() => setSelectedServiceId(srv.id)}
+                      activeOpacity={0.8}
+                    >
+                      <View style={styles.serviceMeta}>
+                        <Text style={styles.serviceName}>{srv.name}</Text>
+                        {srv.description ? (
+                          <Text style={styles.serviceDesc}>{srv.description}</Text>
+                        ) : null}
+                        <Text style={styles.serviceDuration}>⏱ {srv.duration || 30} min</Text>
                       </View>
-                    </View>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
+                      <View style={styles.servicePriceCol}>
+                        <Text style={styles.servicePriceText}>
+                          {srv.price.toLocaleString('uz-UZ')} uzs
+                        </Text>
+                        <View style={[styles.selectRadio, isSelected && styles.selectRadioActive]}>
+                          {isSelected && <View style={styles.radioDot} />}
+                        </View>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            )}
 
-            {/* Step 2: Select Date & Time (Grouped into Ertalab, Kunduzi, Kechqurun) */}
+            {/* Step 2: Select Date & Time */}
             <Text style={styles.sectionTitle}>2. Qulay sana va vaqtni tanlang</Text>
 
             {/* Horizontal Date Picker */}
@@ -358,38 +418,124 @@ export const PublicBookingPreviewModal: React.FC<PublicBookingPreviewModalProps>
               })}
             </ScrollView>
 
-            {/* Dark Styled Time Slots Container (Exact Style from Reference Image) */}
+            {/* Time Slots Container */}
             <View style={styles.darkTimeContainer}>
-              {timeGroups.map((group) => (
-                <View key={group.title} style={styles.timeGroupSection}>
-                  <Text style={styles.timeGroupHeader}>{group.title}</Text>
-                  <View style={styles.timeGrid}>
-                    {group.slots.map((t) => {
-                      const isSelected = selectedTime === t;
-                      return (
-                        <TouchableOpacity
-                          key={t}
-                          style={[
-                            styles.timeSlotPill,
-                            isSelected && styles.timeSlotPillActive,
-                          ]}
-                          onPress={() => setSelectedTime(t)}
-                          activeOpacity={0.75}
-                        >
-                          <Text
-                            style={[
-                              styles.timeSlotText,
-                              isSelected && styles.timeSlotTextActive,
-                            ]}
-                          >
-                            {t}
-                          </Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
+              {isLoadingSlots ? (
+                <View style={{ paddingVertical: 20, alignItems: 'center' }}>
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                  <Text style={{ color: '#9CA3AF', fontSize: 12, marginTop: 8 }}>
+                    Bo'sh vaqtlar tekshirilmoqda...
+                  </Text>
                 </View>
-              ))}
+              ) : availableSlots.length === 0 ? (
+                <Text style={{ color: '#9CA3AF', textAlign: 'center', paddingVertical: 12 }}>
+                  Ushbu kunda qabul uchun bo'sh vaqt yo'q
+                </Text>
+              ) : (
+                <>
+                  {morningSlots.length > 0 && (
+                    <View style={styles.timeGroupSection}>
+                      <Text style={styles.timeGroupHeader}>Ertalab</Text>
+                      <View style={styles.timeGrid}>
+                        {morningSlots.map((slot) => {
+                          const isSelected = selectedTime === slot.time;
+                          return (
+                            <TouchableOpacity
+                              key={slot.time}
+                              disabled={!slot.isAvailable}
+                              style={[
+                                styles.timeSlotPill,
+                                !slot.isAvailable && styles.timeSlotPillDisabled,
+                                isSelected && styles.timeSlotPillActive,
+                              ]}
+                              onPress={() => setSelectedTime(slot.time)}
+                              activeOpacity={0.75}
+                            >
+                              <Text
+                                style={[
+                                  styles.timeSlotText,
+                                  !slot.isAvailable && styles.timeSlotTextDisabled,
+                                  isSelected && styles.timeSlotTextActive,
+                                ]}
+                              >
+                                {slot.time}
+                              </Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+                    </View>
+                  )}
+
+                  {afternoonSlots.length > 0 && (
+                    <View style={styles.timeGroupSection}>
+                      <Text style={styles.timeGroupHeader}>Kunduzi</Text>
+                      <View style={styles.timeGrid}>
+                        {afternoonSlots.map((slot) => {
+                          const isSelected = selectedTime === slot.time;
+                          return (
+                            <TouchableOpacity
+                              key={slot.time}
+                              disabled={!slot.isAvailable}
+                              style={[
+                                styles.timeSlotPill,
+                                !slot.isAvailable && styles.timeSlotPillDisabled,
+                                isSelected && styles.timeSlotPillActive,
+                              ]}
+                              onPress={() => setSelectedTime(slot.time)}
+                              activeOpacity={0.75}
+                            >
+                              <Text
+                                style={[
+                                  styles.timeSlotText,
+                                  !slot.isAvailable && styles.timeSlotTextDisabled,
+                                  isSelected && styles.timeSlotTextActive,
+                                ]}
+                              >
+                                {slot.time}
+                              </Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+                    </View>
+                  )}
+
+                  {eveningSlots.length > 0 && (
+                    <View style={styles.timeGroupSection}>
+                      <Text style={styles.timeGroupHeader}>Kechqurun</Text>
+                      <View style={styles.timeGrid}>
+                        {eveningSlots.map((slot) => {
+                          const isSelected = selectedTime === slot.time;
+                          return (
+                            <TouchableOpacity
+                              key={slot.time}
+                              disabled={!slot.isAvailable}
+                              style={[
+                                styles.timeSlotPill,
+                                !slot.isAvailable && styles.timeSlotPillDisabled,
+                                isSelected && styles.timeSlotPillActive,
+                              ]}
+                              onPress={() => setSelectedTime(slot.time)}
+                              activeOpacity={0.75}
+                            >
+                              <Text
+                                style={[
+                                  styles.timeSlotText,
+                                  !slot.isAvailable && styles.timeSlotTextDisabled,
+                                  isSelected && styles.timeSlotTextActive,
+                                ]}
+                              >
+                                {slot.time}
+                              </Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+                    </View>
+                  )}
+                </>
+              )}
             </View>
 
             {/* Step 3: Client Details */}
@@ -435,12 +581,12 @@ export const PublicBookingPreviewModal: React.FC<PublicBookingPreviewModalProps>
           </ScrollView>
         )}
 
-        {/* Reviews and Ratings Modal for online client booking */}
+        {/* Reviews and Ratings Modal */}
         <ReviewsListModal
           visible={isReviewsModalOpen}
           onClose={() => setIsReviewsModalOpen(false)}
           masterId={masterUsername}
-          masterName="Bobur Aliyev"
+          masterName={masterInfo?.name || 'Bobur Aliyev'}
         />
       </View>
     </Modal>
@@ -602,7 +748,7 @@ const styles = StyleSheet.create({
   },
   serviceCardActive: {
     borderColor: COLOR_PRIMARY,
-    backgroundColor: '#FDFBF7',
+    backgroundColor: '#EFF6FF',
   },
   serviceMeta: {
     flex: 1,
@@ -678,10 +824,8 @@ const styles = StyleSheet.create({
   dateChipTextActive: {
     color: '#FFFFFF',
   },
-
-  /* Dark Theme Time Slots Section matching the user's reference image */
   darkTimeContainer: {
-    backgroundColor: '#1E1E1E',
+    backgroundColor: '#0F172A',
     borderRadius: 20,
     padding: 16,
     gap: 16,
@@ -692,7 +836,7 @@ const styles = StyleSheet.create({
   timeGroupHeader: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#9CA3AF',
+    color: '#94A3B8',
     marginLeft: 2,
   },
   timeGrid: {
@@ -704,26 +848,32 @@ const styles = StyleSheet.create({
     width: '23%',
     height: 44,
     borderRadius: 12,
-    backgroundColor: '#374151',
+    backgroundColor: '#1E293B',
     alignItems: 'center',
     justifyContent: 'center',
   },
+  timeSlotPillDisabled: {
+    opacity: 0.35,
+    backgroundColor: '#334155',
+  },
   timeSlotPillActive: {
-    backgroundColor: '#D1A054',
+    backgroundColor: COLOR_PRIMARY,
     borderWidth: 1.5,
-    borderColor: '#F59E0B',
+    borderColor: '#60A5FA',
   },
   timeSlotText: {
     fontSize: 13,
     fontWeight: '700',
     color: '#FFFFFF',
   },
+  timeSlotTextDisabled: {
+    color: '#64748B',
+    textDecorationLine: 'line-through',
+  },
   timeSlotTextActive: {
-    color: '#111827',
+    color: '#FFFFFF',
     fontWeight: '900',
   },
-
-  /* Form Inputs Card */
   inputsCard: {
     backgroundColor: colors.card,
     borderRadius: 18,
@@ -758,8 +908,6 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     height: '100%',
   },
-
-  /* Success Confirmation Screen */
   successContainer: {
     flex: 1,
     alignItems: 'center',

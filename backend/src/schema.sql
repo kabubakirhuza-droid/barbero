@@ -53,7 +53,7 @@ CREATE TABLE IF NOT EXISTS services (
   name VARCHAR(120) NOT NULL,
   price INTEGER NOT NULL,
   duration INTEGER NOT NULL DEFAULT 30, -- minutes
-  badge_color VARCHAR(30) DEFAULT '#A67C2E',
+  badge_color VARCHAR(30) DEFAULT '#2563EB',
   is_active BOOLEAN DEFAULT TRUE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -82,7 +82,7 @@ CREATE TABLE IF NOT EXISTS appointments (
   service_id VARCHAR(64),
   service_name VARCHAR(120) NOT NULL,
   service_price INTEGER NOT NULL,
-  badge_color VARCHAR(30) DEFAULT '#A67C2E',
+  badge_color VARCHAR(30) DEFAULT '#2563EB',
   appointment_date VARCHAR(20) NOT NULL, -- YYYY-MM-DD
   start_time VARCHAR(10) NOT NULL,       -- "14:00"
   end_time VARCHAR(10) NOT NULL,         -- "14:30"

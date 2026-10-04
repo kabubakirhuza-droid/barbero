@@ -37,14 +37,19 @@ interface SalonsMapViewProps {
 
 const { width } = Dimensions.get('window');
 
-export const SalonsMapView: React.FC<SalonsMapViewProps> = ({
+export const SalonsMapView: React.FC<SalonsMapViewProps & { onRequestLocation?: () => void; userAddress?: string }> = ({
   salons,
   onSelectSalon,
-  userCoords = { lat: 41.311081, lng: 69.240562 },
+  userCoords,
+  onRequestLocation,
+  userAddress = "Toshkent sh.",
 }) => {
   const [selectedSalon, setSelectedSalon] = useState<SalonWithLocation | null>(
     salons[0] || null
   );
+
+  const centerLat = userCoords?.lat || (salons[0]?.latitude ?? 41.311081);
+  const centerLng = userCoords?.lng || (salons[0]?.longitude ?? 69.240562);
 
   // Generate interactive leaflet map HTML for Web iframe
   const mapHtml = `
@@ -56,10 +61,10 @@ export const SalonsMapView: React.FC<SalonsMapViewProps> = ({
       <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
       <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
       <style>
-        body, html { margin: 0; padding: 0; height: 100%; width: 100%; background: #FBF8F4; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        body, html { margin: 0; padding: 0; height: 100%; width: 100%; background: #F8FAFC; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
         #map { height: 100%; width: 100%; }
         .barber-marker {
-          background: #A67C2E;
+          background: #2563EB;
           border: 2.5px solid #FFFFFF;
           color: white;
           width: 38px;
@@ -70,7 +75,7 @@ export const SalonsMapView: React.FC<SalonsMapViewProps> = ({
           justify-content: center;
           font-weight: 800;
           font-size: 16px;
-          box-shadow: 0 4px 10px rgba(166, 124, 46, 0.4);
+          box-shadow: 0 4px 10px rgba(37, 99, 235, 0.4);
           cursor: pointer;
           transition: transform 0.2s;
         }
@@ -91,7 +96,7 @@ export const SalonsMapView: React.FC<SalonsMapViewProps> = ({
         .popup-title { font-weight: 800; font-size: 15px; color: #1F2937; margin-bottom: 4px; }
         .popup-addr { font-size: 12px; color: #6B7280; margin-bottom: 8px; }
         .popup-btn {
-          background: #A67C2E;
+          background: #2563EB;
           color: white;
           text-align: center;
           padding: 6px 12px;
@@ -106,16 +111,30 @@ export const SalonsMapView: React.FC<SalonsMapViewProps> = ({
     <body>
       <div id="map"></div>
       <script>
-        const map = L.map('map', { zoomControl: false }).setView([${userCoords.lat}, ${userCoords.lng}], 13);
+        const map = L.map('map', { zoomControl: false }).setView([${centerLat}, ${centerLng}], 13);
         L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
           maxZoom: 19,
           attribution: '© OpenStreetMap'
+        }).addTo(map);
+
+        ${
+          userCoords
+            ? `
+        // Accuracy circle
+        L.circle([${userCoords.lat}, ${userCoords.lng}], {
+          color: '#2563EB',
+          fillColor: '#3B82F6',
+          fillOpacity: 0.15,
+          radius: 120
         }).addTo(map);
 
         // User location marker
         L.marker([${userCoords.lat}, ${userCoords.lng}], {
           icon: L.divIcon({ className: 'user-marker', iconSize: [18, 18] })
         }).addTo(map).bindPopup('<b>Mening joylashuvim</b>');
+        `
+            : ''
+        }
 
         const salonsData = ${JSON.stringify(salons)};
         salonsData.forEach(salon => {
@@ -168,10 +187,17 @@ export const SalonsMapView: React.FC<SalonsMapViewProps> = ({
         )}
 
         {/* Floating Compass / GPS Indicator */}
-        <View style={styles.gpsFloatingBadge}>
+        <TouchableOpacity
+          style={styles.gpsFloatingBadge}
+          onPress={onRequestLocation}
+          activeOpacity={0.8}
+          accessibilityLabel="Mening joylashuvim"
+        >
           <Navigation size={14} color="#FFFFFF" />
-          <Text style={styles.gpsText}>Toshkent sh., Chilonzor</Text>
-        </View>
+          <Text style={styles.gpsText}>
+            {userCoords ? userAddress || 'Joylashuv aniqlandi' : 'Mening joylashuvim'}
+          </Text>
+        </TouchableOpacity>
       </View>
 
       {/* Horizontal Carousel of Salons on the Map */}
