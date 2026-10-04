@@ -213,6 +213,14 @@ export class Database {
 
   public async createUser(user: User): Promise<User> {
     const fullName = user.fullName || `${user.ism || ''} ${user.familiya || ''}`.trim() || 'Barbero Foydalanuvchi';
+    let finalUsername = user.username || `user_${user.phone.slice(-4)}`;
+    try {
+      const taken = await this.query('SELECT id FROM users WHERE username = $1 AND id != $2 LIMIT 1', [finalUsername, user.id]);
+      if (taken.rows.length > 0) {
+        finalUsername = `${finalUsername}_${Math.floor(1000 + Math.random() * 9000)}`;
+      }
+    } catch (_) {}
+
     const res = await this.query(
       `INSERT INTO users (id, phone, ism, familiya, full_name, username, avatar_url, bio, role, created_at, updated_at)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
@@ -231,7 +239,7 @@ export class Database {
         user.ism || '',
         user.familiya || '',
         fullName,
-        user.username || `user_${user.phone.slice(-4)}`,
+        finalUsername,
         user.avatarUrl || null,
         user.bio || null,
         user.role || 'MASTER',
@@ -247,10 +255,19 @@ export class Database {
     const ism = updates.ism !== undefined ? updates.ism : existing.ism;
     const familiya = updates.familiya !== undefined ? updates.familiya : existing.familiya;
     const fullName = updates.fullName !== undefined ? updates.fullName : `${ism} ${familiya}`.trim();
-    const username = updates.username !== undefined ? updates.username : existing.username;
+    let username = updates.username !== undefined ? updates.username : existing.username;
     const role = updates.role !== undefined ? updates.role : existing.role;
     const avatarUrl = updates.avatarUrl !== undefined ? updates.avatarUrl : existing.avatarUrl;
     const bio = updates.bio !== undefined ? updates.bio : existing.bio;
+
+    if (updates.username && updates.username !== existing.username) {
+      try {
+        const taken = await this.query('SELECT id FROM users WHERE username = $1 AND id != $2 LIMIT 1', [updates.username, id]);
+        if (taken.rows.length > 0) {
+          username = `${updates.username}_${Math.floor(1000 + Math.random() * 9000)}`;
+        }
+      } catch (_) {}
+    }
 
     const res = await this.query(
       `UPDATE users
