@@ -1,16 +1,16 @@
-# Barbero — Rasmiy Mobil Ilova va Backend
+# BarberPlan — Rasmiy Mobil Ilova va Backend
 
-Barbero — go'zallik ustalari (barber, sartarosh, vizajist) uchun mijozlar navbati, bron qilish va daromad hisob-kitoblarini yurituvchi zamonaviy mobil ilova va backend tizimi.
+BarberPlan — go'zallik ustalari (barber, sartarosh, vizajist) uchun mijozlar navbati, bron qilish va daromad hisob-kitoblarini yurituvchi zamonaviy mobil ilova va backend tizimi.
 
 ---
 
 ## 🛠 Texnologiyalar Steki
 
 - **Mobil Ilova:** React Native (Expo SDK 52) + TypeScript
-- **Dizayn tizimi:** Warm Cream (`#FBF8F4`), Oltin-jigarrang (`#A67C2E`), Kartochkalar (`#FFFFFF`, radius 16-20), Lucide Icons, Haptics
+- **Dizayn tizimi:** Royal Cobalt (`#2563EB`), Ice Slate (`#F8FAFC`), Kartochkalar (`#FFFFFF`, radius 16-20), Lucide Icons, Haptics
 - **Backend:** Node.js (Express) + TypeScript + Web Push (`web-push` / VAPID)
 - **Ma'lumotlar bazasi:** PostgreSQL (DDL schema: `backend/src/schema.sql`) + tezkor lokal xotira
-- **Autentifikatsiya:** Telefon raqam + Telegram Gateway API (`sendVerificationMessage`, `checkVerificationStatus`) + JWT Access/Refresh tokenlar
+- **Autentifikatsiya:** Telefon raqam + Telefon OTP / Telegram Gateway API + JWT Access/Refresh tokenlar
 - **Tillari:** O'zbekcha (lotin yozuvi, asosiy) va Ruscha (sozlamalardan o'zgartiriladi)
 
 ---

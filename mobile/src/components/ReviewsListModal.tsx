@@ -34,7 +34,7 @@ export const ReviewsListModal: React.FC<ReviewsListModalProps> = ({
   visible,
   onClose,
   masterId,
-  masterName = 'Barbero Master',
+  masterName = 'BarberPlan Master',
   canAddReview = true,
 }) => {
   const [reviews, setReviews] = useState<ReviewItem[]>([]);

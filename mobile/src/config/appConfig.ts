@@ -1,5 +1,5 @@
 // Central App Name and Base URL configuration (Single Source of Truth)
-export const APP_NAME = 'BARBERO';
+export const APP_NAME = 'BarberPlan';
 
 // Real URL where the app is running (no fake domains)
 export const getAppBaseUrl = (): string => {

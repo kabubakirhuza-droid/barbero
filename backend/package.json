@@ -1,7 +1,7 @@
 {
-  "name": "barbero-backend",
+  "name": "barberplan-backend",
   "version": "1.0.0",
-  "description": "Barbero CRM Backend API with Geolocation Salon Merging",
+  "description": "BarberPlan CRM Backend API with Geolocation Salon Merging",
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",

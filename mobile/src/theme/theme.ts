@@ -1,55 +1,55 @@
 // Single source of truth for all colors and theme tokens
-export const COLOR_PRIMARY = '#A67C2E'; // Change this color to change theme app-wide!
-export const COLOR_DANGER = '#C8383A';
-export const COLOR_BACKGROUND = '#FBF8F4';
+export const COLOR_PRIMARY = '#2563EB'; // BarberPlan Royal Cobalt Blue
+export const COLOR_DANGER = '#EF4444';
+export const COLOR_BACKGROUND = '#F8FAFC';
 export const COLOR_CARD = '#FFFFFF';
-export const COLOR_INPUT_BG = '#FAF6F0';
+export const COLOR_INPUT_BG = '#F1F5F9';
 
 export const colors = {
   // Main palette
-  background: COLOR_BACKGROUND,      // Warm cream
+  background: COLOR_BACKGROUND,      // Crisp ice light
   card: COLOR_CARD,                  // Crisp card white
-  cardBorder: '#EFE9DF',             // Delicate beige border
-  cardBorderSubtle: '#F4EFE6',
-  inputBackground: COLOR_INPUT_BG,   // Beige fill for input fields
+  cardBorder: '#E2E8F0',             // Modern slate border
+  cardBorderSubtle: '#F1F5F9',
+  inputBackground: COLOR_INPUT_BG,   // Slate fill for input fields
 
   // Primary Color & Variants derived from COLOR_PRIMARY
   primary: COLOR_PRIMARY,
-  primaryDisabled: 'rgba(166, 124, 46, 0.4)',
-  primaryLight: '#FAF6F0',           // 44x44 icon container light beige
-  primaryPill: '#F5EFE3',
-  primaryDark: '#856121',
-  primaryHover: '#B98D3B',
+  primaryDisabled: 'rgba(37, 99, 235, 0.4)',
+  primaryLight: '#EFF6FF',           // 44x44 icon container light blue
+  primaryPill: '#DBEAFE',
+  primaryDark: '#1D4ED8',
+  primaryHover: '#3B82F6',
 
   // Danger
   danger: COLOR_DANGER,
-  dangerLight: '#FCEBEB',            // Light pink for Chiqish button
-  dangerHover: '#B02E30',
+  dangerLight: '#FEE2E2',            // Light red for danger actions
+  dangerHover: '#DC2626',
 
   // Text
-  textPrimary: '#1E1B18',
-  textSecondary: '#6B645A',
-  textMuted: '#9E968B',
-  textLight: '#FAF7F2',
+  textPrimary: '#0F172A',
+  textSecondary: '#475569',
+  textMuted: '#94A3B8',
+  textLight: '#FFFFFF',
 
   // Gradients
   gradientOrange: '#F97316',
   gradientYellow: '#EAB308',
 
   // Badge Palette
-  badgeGold: COLOR_PRIMARY,
+  badgeGold: '#F59E0B',
   badgeBlue: '#2563EB',
-  badgeGreen: '#059669',
-  badgePurple: '#7C3AED',
-  badgeTerracotta: '#C2410C',
+  badgeGreen: '#10B981',
+  badgePurple: '#8B5CF6',
+  badgeTerracotta: '#EA580C',
   badgeTurquoise: '#0D9488',
 
   // Utilities
-  skeleton: '#ECE6DC',
-  skeletonHighlight: '#F5F0E8',
-  overlay: 'rgba(26, 22, 17, 0.5)',
-  borderDashed: '#D8CFC2',
-  shadowColor: '#3E3427',
+  skeleton: '#E2E8F0',
+  skeletonHighlight: '#F1F5F9',
+  overlay: 'rgba(15, 23, 42, 0.5)',
+  borderDashed: '#CBD5E1',
+  shadowColor: '#0F172A',
 };
 
 export const badgeOptions = [

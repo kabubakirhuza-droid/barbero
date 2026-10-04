@@ -158,7 +158,7 @@ export const AnimatedSplashScreen: React.FC<AnimatedSplashScreenProps> = ({ onFi
         </View>
 
         {/* Brand Name */}
-        <Text style={styles.brandTitle}>BARBERO</Text>
+        <Text style={styles.brandTitle}>BARBERPLAN</Text>
         <Text style={styles.brandSubtitle}>Sartaroshlar va mijozlar uchun qulay platforma</Text>
 
         {/* Gold Accent Bar */}
@@ -171,7 +171,7 @@ export const AnimatedSplashScreen: React.FC<AnimatedSplashScreenProps> = ({ onFi
 const styles = StyleSheet.create({
   container: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: '#FBF8F4',
+    backgroundColor: '#F8FAFC',
     zIndex: 99999,
     alignItems: 'center',
     justifyContent: 'center',

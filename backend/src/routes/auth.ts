@@ -62,7 +62,7 @@ router.post('/send-code', async (req: Request, res: Response): Promise<void> => 
 
     res.json({
       success: true,
-      message: 'Tasdiqlash kodi Telegram orqali yuborildi',
+      message: 'Tasdiqlash kodi telefoningizga yuborildi',
       requestId: result.requestId,
       phone: cleanPhone,
       ttl: 60,

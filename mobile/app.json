@@ -1,23 +1,23 @@
 {
   "expo": {
-    "name": "Barbero",
-    "slug": "barbero",
+    "name": "BarberPlan",
+    "slug": "barberplan",
     "version": "1.0.9",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "splash": {
-      "backgroundColor": "#FBF8F4"
+      "backgroundColor": "#F8FAFC"
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "uz.barbero.app"
+      "bundleIdentifier": "uz.barberplan.app"
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#FBF8F4"
+        "backgroundColor": "#F8FAFC"
       },
-      "package": "uz.barbero.app"
+      "package": "uz.barberplan.app"
     },
     "web": {
       "favicon": "./assets/favicon.png",

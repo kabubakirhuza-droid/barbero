@@ -76,7 +76,7 @@ export const NotificationsScreen: React.FC<NotificationsScreenProps> = ({ onBack
     {
       id: 'n-3',
       title: 'Xizmat yangilandi',
-      message: 'Barbero ilovasida barcha funksiyalar to‘liq bepul ishlamoqda.',
+      message: 'BarberPlan ilovasida barcha funksiyalar to‘liq bepul ishlamoqda.',
       time: 'Kuni kecha',
       isRead: true,
       type: 'system',

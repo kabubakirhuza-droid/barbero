@@ -63,11 +63,11 @@ export const BarberoLogo: React.FC<BarberoLogoProps> = ({
             },
           ]}
         >
-          BARBERO
+          BARBERPLAN
         </Text>
         {showSubtitle && (
-          <Text style={[styles.brandSubtitle, { color: dark ? '#D4AF37' : colors.textSecondary }]}>
-            HAIRCUTS & STYLE
+          <Text style={[styles.brandSubtitle, { color: dark ? '#60A5FA' : colors.textSecondary }]}>
+            CRM & ONLINE BRON
           </Text>
         )}
       </View>
