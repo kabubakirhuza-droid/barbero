@@ -45,10 +45,10 @@ export const PublicBookingPreviewModal: React.FC<PublicBookingPreviewModalProps>
   useEffect(() => {
     if (visible && masterUsername) {
       api.getReviews(masterUsername).then(res => {
-        if (res?.summary) {
+        if (res) {
           setRatingStats({
-            rating: res.summary.averageRating || 4.9,
-            count: res.summary.totalReviews || 18,
+            rating: res.avgRating || 4.9,
+            count: res.count || 18,
           });
         }
       }).catch(() => {});
