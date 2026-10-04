@@ -57,7 +57,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
   const [familiyaFocused, setFamiliyaFocused] = useState(false);
 
   // Step: Phone
-  const [rawPhone, setRawPhone] = useState('901234567');
+  const [rawPhone, setRawPhone] = useState('');
   const [isPhoneFocused, setIsPhoneFocused] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
