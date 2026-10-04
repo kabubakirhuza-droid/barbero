@@ -71,15 +71,29 @@ function MainApp() {
   useEffect(() => {
     const initApp = async () => {
       try {
-        await api.initToken();
+        const token = await api.initToken();
         const onboardingDone = await AsyncStorage.getItem('app_onboarding_done');
-        const token = await AsyncStorage.getItem('app_token');
         const storedRole = await AsyncStorage.getItem(ROLE_KEY);
 
-        setHasCompletedOnboarding(onboardingDone === 'true');
+        setHasCompletedOnboarding(onboardingDone === 'true' || !!token);
         setIsAuthenticated(!!token);
+
         if (storedRole === 'CLIENT' || storedRole === 'MASTER') {
           setUserRole(storedRole as UserRole);
+        } else if (token) {
+          // If token exists, fetch profile from backend to restore user role
+          try {
+            const meRes = await api.getMe();
+            if (meRes?.user?.role) {
+              const role = meRes.user.role as UserRole;
+              setUserRole(role);
+              await AsyncStorage.setItem(ROLE_KEY, role);
+            } else {
+              setUserRole('MASTER');
+            }
+          } catch (e) {
+            setUserRole('MASTER');
+          }
         }
       } catch (e) {
         setHasCompletedOnboarding(false);
@@ -100,6 +114,7 @@ function MainApp() {
   };
 
   const handleAuthSuccess = async () => {
+    await AsyncStorage.setItem('app_onboarding_done', 'true');
     // Read role from storage (was set in handleRoleSelected)
     const storedRole = await AsyncStorage.getItem(ROLE_KEY);
     const role = storedRole === 'CLIENT' || storedRole === 'MASTER'

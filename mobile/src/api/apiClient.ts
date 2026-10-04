@@ -23,7 +23,10 @@ class ApiClient {
 
   async initToken(): Promise<string | null> {
     try {
-      this.token = (await AsyncStorage.getItem(TOKEN_KEY)) || (await AsyncStorage.getItem('app_token'));
+      this.token =
+        (await AsyncStorage.getItem(TOKEN_KEY)) ||
+        (await AsyncStorage.getItem('app_token')) ||
+        (typeof window !== 'undefined' && window.localStorage ? window.localStorage.getItem(TOKEN_KEY) : null);
       return this.token;
     } catch (e) {
       return null;
@@ -33,12 +36,25 @@ class ApiClient {
   setToken(token: string) {
     this.token = token;
     AsyncStorage.setItem(TOKEN_KEY, token);
+    AsyncStorage.setItem('app_token', token);
+    if (typeof window !== 'undefined' && window.localStorage) {
+      try {
+        window.localStorage.setItem(TOKEN_KEY, token);
+        window.localStorage.setItem('app_token', token);
+      } catch (e) {}
+    }
   }
 
   clearToken() {
     this.token = null;
     AsyncStorage.removeItem(TOKEN_KEY);
     AsyncStorage.removeItem('app_token');
+    if (typeof window !== 'undefined' && window.localStorage) {
+      try {
+        window.localStorage.removeItem(TOKEN_KEY);
+        window.localStorage.removeItem('app_token');
+      } catch (e) {}
+    }
   }
 
   getToken(): string | null {
