@@ -7,9 +7,10 @@ const getApiBaseUrl = () => {
     return process.env.EXPO_PUBLIC_API_URL;
   }
   if (typeof window !== 'undefined' && window.location) {
-    const hostname = window.location.hostname;
-    if (hostname !== 'localhost' && hostname !== '127.0.0.1') {
-      return ''; // Relative in production (Vercel)
+    const port = window.location.port;
+    // When served via Vercel dev (3000/3001), Express backend (5000), or production domain:
+    if (port !== '8081') {
+      return ''; // Relative same-origin URL
     }
   }
   return 'http://127.0.0.1:5000';

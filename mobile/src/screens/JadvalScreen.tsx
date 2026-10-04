@@ -108,43 +108,25 @@ export const JadvalScreen: React.FC<JadvalScreenProps> = () => {
   // Load appointments
   const loadAppointments = async () => {
     try {
-      const res = await api.getAppointments();
-      if (res?.appointments) {
-        setAppointments(res.appointments);
+      const [aptRes, srvRes] = await Promise.all([
+        api.getAppointments().catch(() => null),
+        api.getServices().catch(() => null),
+      ]);
+
+      if (aptRes?.appointments) {
+        setAppointments(aptRes.appointments);
       }
-      const srvRes = await api.getServices();
       if (srvRes?.services && srvRes.services.length > 0) {
         setServices(srvRes.services);
       }
     } catch (e) {
-      // Offline fallback initial appointment
-      setAppointments((prev) =>
-        prev.length > 0
-          ? prev
-          : [
-              {
-                id: 'apt-1',
-                clientId: 'c-1',
-                clientName: 'Mijoz 1',
-                clientPhone: '+998 90 123 45 67',
-                serviceId: 'srv-1',
-                serviceName: 'Soch olish',
-                servicePrice: 50000,
-                badgeColor: '#A67C2E',
-                date: '2026-09-29',
-                startTime: '09:30',
-                endTime: '10:00',
-                duration: 30,
-                status: 'confirmed',
-              },
-            ]
-      );
+      // Don't overwrite existing appointments if offline
     }
   };
 
   useEffect(() => {
     loadAppointments();
-    const interval = setInterval(loadAppointments, 3000);
+    const interval = setInterval(loadAppointments, 5000);
     return () => clearInterval(interval);
   }, []);
 
@@ -179,21 +161,32 @@ export const JadvalScreen: React.FC<JadvalScreenProps> = () => {
     };
 
     // Instant UI update
-    setAppointments((prev) => [...prev, newApt]);
+    setAppointments((prev) => {
+      const alreadyHas = prev.some(
+        (a) => a.date === currentDateObj.fullDate && a.startTime === slotTime && a.status !== 'cancelled'
+      );
+      if (alreadyHas) return prev;
+      return [...prev, newApt];
+    });
 
     try {
-      const res = await api.quickBookAppointment({
+      const res = await api.createAppointment({
         date: currentDateObj.fullDate,
         startTime: slotTime,
         serviceId: defaultSrv.id,
+        serviceName: defaultSrv.name,
+        servicePrice: defaultSrv.price,
+        badgeColor: defaultSrv.badgeColor,
+        clientName: `Mijoz ${nextNumber}`,
+        duration: 30,
       });
       if (res?.appointment) {
         setAppointments((prev) =>
           prev.map((a) => (a.id === tempId ? res.appointment : a))
         );
       }
-    } catch (err) {
-      console.warn('Quick booking offline fallback');
+    } catch (err: any) {
+      console.warn('Quick booking error:', err);
     }
   };
 
