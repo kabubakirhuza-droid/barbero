@@ -1,6 +1,6 @@
-# BarberPlan — Rasmiy Mobil Ilova va Backend
+# Barbero — Rasmiy Mobil Ilova va Backend
 
-BarberPlan — go'zallik ustalari (barber, sartarosh, vizajist) uchun mijozlar navbati, bron qilish va daromad hisob-kitoblarini yurituvchi zamonaviy mobil ilova va backend tizimi.
+Barbero — go'zallik ustalari (barber, sartarosh, vizajist) uchun mijozlar navbati, bron qilish va daromad hisob-kitoblarini yurituvchi zamonaviy mobil ilova va backend tizimi.
 
 ---
 

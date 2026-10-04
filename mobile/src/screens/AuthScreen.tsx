@@ -215,7 +215,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
 
       // If in register mode or profile needs to be saved:
       const nameToSave = ism.trim() || res?.user?.ism || 'Foydalanuvchi';
-      const surNameToSave = familiya.trim() || res?.user?.familiya || 'BarberPlan';
+      const surNameToSave = familiya.trim() || res?.user?.familiya || 'Barbero';
 
       await api.registerProfile(
         nameToSave,
@@ -301,7 +301,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
 
   // Create New Salon
   const handleCreateSalon = async () => {
-    const name = newSalonName.trim() || `${ism || 'BarberPlan'} Sartaroshxonasi`;
+    const name = newSalonName.trim() || `${ism || 'Barbero'} Sartaroshxonasi`;
     setLoading(true);
     try {
       await api.createSalon({
@@ -742,7 +742,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                       style={styles.textInputField}
                       value={newSalonName}
                       onChangeText={setNewSalonName}
-                      placeholder={`${ism || 'BarberPlan'} Sartaroshxonasi`}
+                      placeholder={`${ism || 'Barbero'} Sartaroshxonasi`}
                       placeholderTextColor={colors.textMuted}
                     />
                   </View>
@@ -766,7 +766,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
               <SalonLocationMapPicker
                 coords={coords}
                 address={newSalonAddress}
-                salonName={newSalonName || `${ism || 'BarberPlan'} Sartaroshxonasi`}
+                salonName={newSalonName || `${ism || 'Barbero'} Sartaroshxonasi`}
                 onCoordsChange={(newCoords, addrHint) => {
                   setCoords(newCoords);
                   if (addrHint) {

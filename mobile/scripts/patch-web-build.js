@@ -2,49 +2,29 @@ const fs = require('fs');
 const path = require('path');
 
 const distDir = path.join(__dirname, '..', 'dist');
-const webDir = path.join(__dirname, '..', 'web');
-const assetsDir = path.join(__dirname, '..', 'assets');
 const publicDir = path.join(__dirname, '..', 'public');
 
 if (!fs.existsSync(distDir)) {
   fs.mkdirSync(distDir, { recursive: true });
 }
 
-if (!fs.existsSync(publicDir)) {
-  fs.mkdirSync(publicDir, { recursive: true });
+// 1. Ensure icons are generated and copied from public to dist
+if (fs.existsSync(publicDir)) {
+  const publicFiles = fs.readdirSync(publicDir);
+  publicFiles.forEach((file) => {
+    const src = path.join(publicDir, file);
+    const dest = path.join(distDir, file);
+    fs.copyFileSync(src, dest);
+  });
 }
 
-// 1. Copy web files (manifest.json, sw.js) to dist and public
-const filesToCopy = ['manifest.json', 'sw.js'];
-filesToCopy.forEach((file) => {
-  const src = path.join(webDir, file);
-  if (fs.existsSync(src)) {
-    fs.copyFileSync(src, path.join(distDir, file));
-    fs.copyFileSync(src, path.join(publicDir, file));
-  }
-});
-
-// 2. Copy asset images (icon.png, favicon.png, etc.)
-const assetFiles = ['icon.png', 'favicon.png', 'logo.png', 'adaptive-icon.png'];
-assetFiles.forEach((file) => {
-  const src = path.join(assetsDir, file);
-  if (fs.existsSync(src)) {
-    fs.copyFileSync(src, path.join(distDir, file));
-    fs.copyFileSync(src, path.join(publicDir, file));
-    if (file === 'icon.png') {
-      fs.copyFileSync(src, path.join(distDir, 'apple-touch-icon.png'));
-      fs.copyFileSync(src, path.join(publicDir, 'apple-touch-icon.png'));
-    }
-  }
-});
-
-// 3. Patch index.html in dist
+// 2. Patch index.html in dist
 const indexHtmlPath = path.join(distDir, 'index.html');
 if (fs.existsSync(indexHtmlPath)) {
   let html = fs.readFileSync(indexHtmlPath, 'utf8');
 
-  // Ensure title is BarberPlan
-  html = html.replace(/<title>.*?<\/title>/gi, '<title>BarberPlan - Go\'zallik va sartaroshlik ustalari uchun CRM</title>');
+  // Ensure title is Barbero
+  html = html.replace(/<title>.*?<\/title>/gi, '<title>Barbero - Go\'zallik va sartaroshlik ustalari uchun CRM</title>');
 
   // Ensure viewport has viewport-fit=cover
   if (!html.includes('viewport-fit=cover')) {
@@ -56,15 +36,16 @@ if (fs.existsSync(indexHtmlPath)) {
 
   // Inject PWA meta tags if not present
   const metaTags = `
-    <!-- BarberPlan PWA Meta Tags -->
+    <!-- Barbero PWA Meta Tags -->
     <link rel="manifest" href="/manifest.json" />
     <meta name="theme-color" content="#2563EB" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="BarberPlan" />
-    <link rel="apple-touch-icon" href="/icon.png" />
-    <link rel="apple-touch-icon" sizes="180x180" href="/icon.png" />
-    <link rel="icon" type="image/png" href="/icon.png" />
+    <meta name="apple-mobile-web-app-title" content="Barbero" />
+    <link rel="apple-touch-icon" href="/icon-180.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/icon-180.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
+    <link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png" />
   `;
 
   if (!html.includes('rel="manifest"')) {
@@ -90,4 +71,27 @@ if (fs.existsSync(indexHtmlPath)) {
 
   fs.writeFileSync(indexHtmlPath, html, 'utf8');
   console.log('✅ Successfully patched mobile/dist/index.html with PWA manifests, meta tags, and ServiceWorker registration.');
+}
+
+// 3. Post-build Validation: Verify all icons in manifest.json exist in dist and are valid PNGs
+const manifestPath = path.join(distDir, 'manifest.json');
+if (fs.existsSync(manifestPath)) {
+  const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+  console.log('🔍 Validating Barbero PWA icons in dist:');
+  const pngHeader = Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]);
+
+  if (Array.isArray(manifest.icons)) {
+    for (const icon of manifest.icons) {
+      const iconFileName = icon.src.replace(/^\//, '');
+      const iconPath = path.join(distDir, iconFileName);
+      if (!fs.existsSync(iconPath)) {
+        throw new Error(`❌ Missing manifest icon file: ${iconPath}`);
+      }
+      const iconBuf = fs.readFileSync(iconPath);
+      if (!iconBuf.subarray(0, 8).equals(pngHeader)) {
+        throw new Error(`❌ Icon file ${iconFileName} is not a valid PNG!`);
+      }
+      console.log(` ✓ Manifest icon ${icon.src} (${icon.sizes}) verified as valid PNG (${iconBuf.length} bytes)`);
+    }
+  }
 }

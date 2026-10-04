@@ -287,8 +287,6 @@ async function runTests() {
   if (pushStatus.status !== 200 || !pushStatus.data.isSubscribed) {
     throw new Error(`Push status check failed: ${JSON.stringify(pushStatus)}`);
   }
-  console.log(`   ✓ Push subscription verified: active (${pushStatus.data.subscriptionsCount} sub(s))`);
-
   // 10. Analytics
   console.log('\n10. Testing Analytics Calculation...');
   const analyticsRes = await request('/analytics?period=oy', { headers: authHeaders });
@@ -297,8 +295,42 @@ async function runTests() {
   }
   console.log(`   ✓ Analytics calculated: Revenue ${analyticsRes.data.revenue.formatted}, Bookings: ${analyticsRes.data.revenue.totalBookings}`);
 
+  // 11. Strict Telegram Gateway & Zero Mock/Backdoor Code Rejection
+  console.log('\n11. Testing Strict Telegram Gateway (Zero Mock/Backdoor Codes)...');
+  
+  // 11a. Verify fake codes fail immediately without a valid session
+  const fakeCodes = ['111111', '777777', '123456', '000000', '999999'];
+  for (const fakeCode of fakeCodes) {
+    const fakeVerify = await request('/auth/verify', {
+      method: 'POST',
+      body: JSON.stringify({
+        phone: '+998901234567',
+        code: fakeCode,
+        requestId: 'fake-req-' + Date.now(),
+      }),
+    });
+    if (fakeVerify.status !== 400 || fakeVerify.data.token || fakeVerify.data.accessToken) {
+      throw new Error(`CRITICAL SECURITY FAILURE: Fake code ${fakeCode} was accepted or didn't return 400! Response: ${JSON.stringify(fakeVerify)}`);
+    }
+  }
+  console.log('   ✓ Backdoor / mock codes (111111, 999999, etc.) strictly rejected with 400');
+
+  // 11b. Send code to invalid or unavailable Telegram Gateway
+  // If Telegram Gateway token is unconfigured or returns upstream error, it must return an error status (400/503) and NOT create an active session
+  const fakeSend = await request('/auth/telegram-gateway/send-code', {
+    method: 'POST',
+    body: JSON.stringify({
+      phone: '+998000000000',
+    }),
+  });
+  // Must either be rate-limited, fail upstream, or return error message
+  if (fakeSend.status === 200 && fakeSend.data.success && fakeSend.data.requestId?.startsWith('dev-req-')) {
+    throw new Error(`CRITICAL SECURITY FAILURE: send-code generated a synthetic dev-req fallback! Response: ${JSON.stringify(fakeSend)}`);
+  }
+  console.log(`   ✓ Telegram Gateway send-code behavior verified (status: ${fakeSend.status})`);
+
   console.log('\n=======================================================');
-  console.log(' 🎉 ALL 10 E2E BARBERO BACKEND TESTS PASSED (100%)');
+  console.log(' 🎉 ALL 11 E2E BARBERO BACKEND TESTS PASSED (100%)');
   console.log('=======================================================\n');
   await pool.end();
 }

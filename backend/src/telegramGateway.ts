@@ -19,19 +19,19 @@ export interface TelegramGatewayCheckResult {
 
 export function mapTelegramErrorMessage(rawError: string): string {
   const lower = String(rawError || '').toLowerCase();
-  if (lower.includes('403') || lower.includes('unauthorized') || lower.includes('forbidden')) {
+  if (lower.includes('403') || lower.includes('unauthorized') || lower.includes('forbidden') || lower.includes('invalid_token')) {
     return 'Xizmat vaqtincha ishlamayapti';
   }
   if (lower.includes('flood') || lower.includes('too many') || lower.includes('rate limit') || lower.includes('429')) {
     return "Juda ko'p urinish. Iltimos, keyinroq qayta urinib ko'ring";
   }
-  if (lower.includes('phone') && (lower.includes('invalid') || lower.includes('not found') || lower.includes('not_registered'))) {
+  if (lower.includes('phone') && (lower.includes('invalid') || lower.includes('not found') || lower.includes('not_registered') || lower.includes('user_not_found'))) {
     return "Telegram'da bu raqam topilmadi";
   }
-  if (lower.includes('network') || lower.includes('econnrefused') || lower.includes('timeout') || lower.includes('enotfound')) {
+  if (lower.includes('network') || lower.includes('econnrefused') || lower.includes('timeout') || lower.includes('enotfound') || lower.includes('503')) {
     return "Tarmoqda xatolik yuz berdi. Iltimos, internet aloqasini tekshiring";
   }
-  return "Xizmat vaqtincha ishlamayapti";
+  return "Telegram orqali kod yuborishda xatolik yuz berdi";
 }
 
 class TelegramGatewayService {
@@ -42,18 +42,9 @@ class TelegramGatewayService {
     };
   }
 
-  private handleSendError(errorMsg: string, phoneNumber: string): TelegramGatewaySendResult {
-    const devRequestId = `phone-otp-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-
-    return {
-      success: true,
-      requestId: devRequestId,
-      details: { directPhoneOtp: true, defaultCode: '111111', message: mapTelegramErrorMessage(errorMsg) },
-    };
-  }
-
   /**
    * Send 6-digit verification code via Telegram Gateway API (@VerificationCodes)
+   * Strictly communicates with upstream API - no fallback mock codes.
    */
   async sendVerificationMessage(phoneNumber: string): Promise<TelegramGatewaySendResult> {
     try {
@@ -79,8 +70,12 @@ class TelegramGatewayService {
         };
       }
 
-      const rawError = data?.error || "Telegram orqali kod yuborishda xatolik yuz berdi";
-      return this.handleSendError(rawError, phoneNumber);
+      const rawError = data?.error || 'Telegram Gateway javob bermadi';
+      console.warn(`[TelegramGateway] sendVerificationMessage upstream error for ${phoneNumber}: ${rawError}`);
+      return {
+        success: false,
+        error: mapTelegramErrorMessage(rawError),
+      };
     } catch (err: any) {
       const errorMsg =
         err.response?.data?.error ||
@@ -88,25 +83,19 @@ class TelegramGatewayService {
         err.message ||
         "Telegram Gateway bilan bog'lanishda xatolik";
 
-      return this.handleSendError(errorMsg, phoneNumber);
+      console.warn(`[TelegramGateway] sendVerificationMessage connection error for ${phoneNumber}: ${errorMsg}`);
+      return {
+        success: false,
+        error: mapTelegramErrorMessage(errorMsg),
+      };
     }
   }
 
   /**
-   * Check verification code status via Telegram Gateway API
+   * Check verification code status strictly via Telegram Gateway API
    */
   async checkVerificationStatus(requestId: string, code: string): Promise<TelegramGatewayCheckResult> {
     const trimmedCode = code.trim();
-
-    // Support direct phone OTP verification (standalone phone verification)
-    if (requestId.startsWith('dev-req-') || requestId.startsWith('phone-otp-')) {
-      const isDevValid = ['111111', '777777', '123456', '000000', '999999'].includes(trimmedCode);
-      return {
-        success: true,
-        codeValid: isDevValid,
-        statusType: isDevValid ? 'code_valid' : 'code_invalid',
-      };
-    }
 
     try {
       const response = await axios.post(
@@ -136,10 +125,11 @@ class TelegramGatewayService {
         };
       }
 
+      const rawError = data?.error || 'Kodni tekshirishda xatolik';
       return {
         success: false,
         codeValid: false,
-        error: data?.error || 'Kodni tekshirishda xatolik',
+        error: mapTelegramErrorMessage(rawError),
       };
     } catch (err: any) {
       const errorMsg =
@@ -148,16 +138,15 @@ class TelegramGatewayService {
         err.message ||
         'Kodni tekshirishda xatolik';
 
-      console.warn(`[TelegramGateway] checkVerificationStatus error:`, errorMsg);
+      console.warn(`[TelegramGateway] checkVerificationStatus error for req ${requestId}: ${errorMsg}`);
 
       return {
         success: false,
         codeValid: false,
-        error: errorMsg,
+        error: mapTelegramErrorMessage(errorMsg),
       };
     }
   }
 }
 
 export const telegramGateway = new TelegramGatewayService();
-

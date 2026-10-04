@@ -1,9 +1,10 @@
 {
-  "name": "barberplan-mobile",
+  "name": "barbero-mobile",
   "version": "1.0.9",
   "scripts": {
     "start": "expo start",
-    "build": "expo export --platform web",
+    "prebuild": "node scripts/generate-icons.js",
+    "build": "node scripts/generate-icons.js && expo export --platform web",
     "postbuild": "node scripts/patch-web-build.js",
     "android": "expo start --android",
     "ios": "expo start --ios",

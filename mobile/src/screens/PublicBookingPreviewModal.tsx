@@ -89,8 +89,8 @@ export const PublicBookingPreviewModal: React.FC<PublicBookingPreviewModalProps>
   useEffect(() => {
     const initClientInfo = async () => {
       try {
-        const savedName = await AsyncStorage.getItem('barberplan_client_name');
-        const savedPhone = await AsyncStorage.getItem('barberplan_client_phone');
+        const savedName = await AsyncStorage.getItem('barbero_client_name');
+        const savedPhone = await AsyncStorage.getItem('barbero_client_phone');
         if (savedName) setClientName(savedName);
         if (savedPhone) {
           const clean = savedPhone.replace(/\D/g, '');
@@ -237,8 +237,8 @@ export const PublicBookingPreviewModal: React.FC<PublicBookingPreviewModalProps>
       const fullPhone = `+998${rawPhone}`;
 
       // Persist client details for future bookings
-      await AsyncStorage.setItem('barberplan_client_name', clientName.trim());
-      await AsyncStorage.setItem('barberplan_client_phone', fullPhone);
+      await AsyncStorage.setItem('barbero_client_name', clientName.trim());
+      await AsyncStorage.setItem('barbero_client_phone', fullPhone);
 
       await api.bookPublicSlot(masterUsername, {
         clientName: clientName.trim(),

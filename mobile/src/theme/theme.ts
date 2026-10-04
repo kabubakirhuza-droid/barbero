@@ -1,5 +1,5 @@
 // Single source of truth for all colors and theme tokens
-export const COLOR_PRIMARY = '#2563EB'; // BarberPlan Royal Cobalt Blue
+export const COLOR_PRIMARY = '#2563EB'; // Barbero Royal Cobalt Blue
 export const COLOR_DANGER = '#EF4444';
 export const COLOR_BACKGROUND = '#F8FAFC';
 export const COLOR_CARD = '#FFFFFF';

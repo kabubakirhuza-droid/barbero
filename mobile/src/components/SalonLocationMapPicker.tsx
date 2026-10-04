@@ -34,7 +34,7 @@ const DISTRICT_PRESETS = [
 export const SalonLocationMapPicker: React.FC<SalonLocationMapPickerProps> = ({
   coords,
   address,
-  salonName = 'BarberPlan Sartaroshxonasi',
+  salonName = 'Barbero Sartaroshxonasi',
   onCoordsChange,
   height = 240,
 }) => {

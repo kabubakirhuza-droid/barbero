@@ -21,7 +21,7 @@ export const translations = {
 
     // Auth
     welcomeTitle: 'Xush kelibsiz!',
-    welcomeSub: 'BarberPlan bilan oson rejalashtiring va maqsadingiz sari birinchi qadamni tashlang!',
+    welcomeSub: 'Barbero bilan oson rejalashtiring va maqsadingiz sari birinchi qadamni tashlang!',
     phoneLabel: 'Telefon raqam',
     submitPhone: 'Kodni olish',
     smsVerifyTitle: 'Sms kodni tasdiqlang!',
@@ -124,7 +124,7 @@ export const translations = {
     help: 'Yordam',
     legalDocs: 'Huquqiy hujjatlar',
     logout: 'Chiqish',
-    versionText: 'BarberPlan • versiya 1.0.9',
+    versionText: 'Barbero • versiya 1.0.9',
 
     // Booking Link Subscreen
     linkWorkingStatus: 'Havolangiz ishlayapti',
@@ -200,7 +200,7 @@ export const translations = {
 
     // Auth
     welcomeTitle: 'Добро пожаловать!',
-    welcomeSub: 'Планируйте легко с BarberPlan и сделайте первый шаг к вашей цели!',
+    welcomeSub: 'Планируйте легко с Barbero и сделайте первый шаг к вашей цели!',
     phoneLabel: 'Номер телефона',
     submitPhone: 'Получить код',
     smsVerifyTitle: 'Подтвердите код из SMS!',
@@ -303,7 +303,7 @@ export const translations = {
     help: 'Помощь',
     legalDocs: 'Правовые документы',
     logout: 'Выйти',
-    versionText: 'BarberPlan • версия 1.0.9',
+    versionText: 'Barbero • версия 1.0.9',
 
     // Booking Link Subscreen
     linkWorkingStatus: 'Ваша ссылка активна',

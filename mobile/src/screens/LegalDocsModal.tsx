@@ -80,8 +80,8 @@ export const LegalDocsModal: React.FC<LegalDocsModalProps> = ({ visible, onClose
               <>
                 <Text style={styles.docTitle}>
                   {language === 'uz'
-                    ? 'BARBERPLAN platformasi ommaviy oferta shartnomasi'
-                    : 'Публичная оферта сервиса BARBERPLAN'}
+                    ? 'BARBERO platformasi ommaviy oferta shartnomasi'
+                    : 'Публичная оферта сервиса BARBERO'}
                 </Text>
                 <Text style={styles.updateDate}>
                   {language === 'uz' ? 'Oxirgi yangilanish: 2026-yil 1-oktabr' : 'Последнее обновление: 1 октября 2026 г.'}
@@ -89,12 +89,12 @@ export const LegalDocsModal: React.FC<LegalDocsModalProps> = ({ visible, onClose
 
                 <Text style={styles.sectionHeading}>1. Umumiy qoidalar</Text>
                 <Text style={styles.paragraph}>
-                  Ushbu Ommaviy oferta «BarberPlan» xizmatidan foydalanish shartlarini belgilaydi. Ilovada ro‘yxatdan o‘tish orqali foydalanuvchi mazkur shartlarga to‘liq va shartsiz rozilik bildiradi.
+                  Ushbu Ommaviy oferta «Barbero» xizmatidan foydalanish shartlarini belgilaydi. Ilovada ro‘yxatdan o‘tish orqali foydalanuvchi mazkur shartlarga to‘liq va shartsiz rozilik bildiradi.
                 </Text>
 
                 <Text style={styles.sectionHeading}>2. Xizmat maqsadi va bepul foydalanish</Text>
                 <Text style={styles.paragraph}>
-                  BarberPlan platformasi sartaroshlar va go‘zallik ustalari uchun qabul jadvalini yuritish, mijozlar navbatini tartibga solish va onlayn bronlash tizimini taqdim etadi. Hozirgi bosqichda tizimning barcha imkoniyatlari ustalarga bepul taqdim etiladi.
+                  Barbero platformasi sartaroshlar va go‘zallik ustalari uchun qabul jadvalini yuritish, mijozlar navbatini tartibga solish va onlayn bronlash tizimini taqdim etadi. Hozirgi bosqichda tizimning barcha imkoniyatlari ustalarga bepul taqdim etiladi.
                 </Text>
 
                 <Text style={styles.sectionHeading}>3. Usta va mijoz majburiyatlari</Text>

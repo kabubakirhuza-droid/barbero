@@ -17,8 +17,8 @@ self.addEventListener('push', (event) => {
   let data = {
     title: 'Barbero',
     body: 'Yangi bildirishnoma mavjud',
-    icon: '/assets/icon.png',
-    badge: '/assets/icon.png',
+    icon: '/icon-192.png',
+    badge: '/icon-192.png',
     tag: 'barbero-notification',
     data: { url: '/', screen: 'bookingRequests' },
   };
@@ -34,8 +34,8 @@ self.addEventListener('push', (event) => {
 
   const notificationOptions = {
     body: data.body,
-    icon: data.icon || '/assets/icon.png',
-    badge: data.badge || '/assets/icon.png',
+    icon: data.icon || '/icon-192.png',
+    badge: data.badge || '/icon-192.png',
     tag: data.tag || 'barbero-notification',
     data: data.data || { url: '/' },
     vibrate: [200, 100, 200],
