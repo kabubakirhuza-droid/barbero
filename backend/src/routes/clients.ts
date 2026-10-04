@@ -7,63 +7,76 @@ const router = Router();
 router.use(authenticateToken);
 
 // GET /clients
-router.get('/', (req: AuthRequest, res: Response) => {
-  const userId = req.user!.userId;
-  const clients = db.getClients(userId);
-  res.json({ clients });
+router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.user!.userId;
+    const clients = await db.getClients(userId);
+    res.json({ clients });
+  } catch (error) {
+    console.error('[Clients GET error]:', error);
+    res.status(500).json({ error: 'Mijozlarni yuklashda xatolik yuz berdi' });
+  }
 });
 
 // GET /clients/:id
-router.get('/:id', (req: AuthRequest, res: Response): void => {
-  const userId = req.user!.userId;
-  const { id } = req.params;
-  const client = db.clients.find((c) => c.id === id && c.userId === userId);
-  if (!client) {
-    res.status(404).json({ error: 'Mijoz topilmadi yoki ruxsat berilmagan' });
-    return;
+router.get('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.user!.userId;
+    const { id } = req.params;
+    const client = await db.getClientById(id, userId);
+    if (!client) {
+      res.status(404).json({ error: 'Mijoz topilmadi yoki ruxsat berilmagan' });
+      return;
+    }
+    const appointments = await db.getAppointmentsByClientId(id, userId);
+    res.json({ client, appointments });
+  } catch (error) {
+    console.error('[Clients GET :id error]:', error);
+    res.status(500).json({ error: 'Mijoz maʼlumotlarini yuklashda xatolik yuz berdi' });
   }
-  const appointments = db.appointments.filter((a) => a.clientId === id && a.userId === userId);
-  res.json({ client, appointments });
 });
 
 // PUT /clients/:id
-router.put('/:id', (req: AuthRequest, res: Response): void => {
-  const userId = req.user!.userId;
-  const { id } = req.params;
-  const client = db.clients.find((c) => c.id === id && c.userId === userId);
-  if (!client) {
-    res.status(404).json({ error: 'Mijoz topilmadi yoki ruxsat berilmagan' });
-    return;
-  }
+router.put('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.user!.userId;
+    const { id } = req.params;
 
-  if (req.body.name) client.name = String(req.body.name).trim();
-  if (req.body.phone) client.phone = String(req.body.phone).trim();
-  if (req.body.notes !== undefined) client.notes = String(req.body.notes);
+    const updated = await db.updateClient(id, userId, {
+      name: req.body.name !== undefined ? String(req.body.name).trim() : undefined,
+      phone: req.body.phone !== undefined ? String(req.body.phone).trim() : undefined,
+      notes: req.body.notes !== undefined ? String(req.body.notes) : undefined,
+    });
 
-  // Also update latest appointments client info
-  db.appointments.forEach((a) => {
-    if (a.clientId === id && a.userId === userId) {
-      if (req.body.name) a.clientName = client.name;
-      if (req.body.phone) a.clientPhone = client.phone;
+    if (!updated) {
+      res.status(404).json({ error: 'Mijoz topilmadi yoki ruxsat berilmagan' });
+      return;
     }
-  });
 
-  res.json({ success: true, client });
+    res.json({ success: true, client: updated });
+  } catch (error) {
+    console.error('[Clients PUT error]:', error);
+    res.status(500).json({ error: 'Mijozni yangilashda xatolik yuz berdi' });
+  }
 });
 
 // DELETE /clients/:id
-router.delete('/:id', (req: AuthRequest, res: Response): void => {
-  const userId = req.user!.userId;
-  const { id } = req.params;
-  const initialLen = db.clients.length;
-  db.clients = db.clients.filter((c) => !(c.id === id && c.userId === userId));
+router.delete('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.user!.userId;
+    const { id } = req.params;
+    const deleted = await db.deleteClient(id, userId);
 
-  if (db.clients.length === initialLen) {
-    res.status(404).json({ error: 'Mijoz topilmadi yoki ruxsat berilmagan' });
-    return;
+    if (!deleted) {
+      res.status(404).json({ error: 'Mijoz topilmadi yoki ruxsat berilmagan' });
+      return;
+    }
+
+    res.json({ success: true, message: "Mijoz o'chirildi" });
+  } catch (error) {
+    console.error('[Clients DELETE error]:', error);
+    res.status(500).json({ error: "Mijozni o'chirishda xatolik yuz berdi" });
   }
-
-  res.json({ success: true, message: "Mijoz o'chirildi" });
 });
 
 export default router;

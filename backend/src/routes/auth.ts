@@ -32,7 +32,7 @@ router.post('/send-code', async (req: Request, res: Response): Promise<void> => 
     }
 
     // Persistent rate limit check: 1 send per 60 seconds
-    const existing = db.getOtpSession(cleanPhone);
+    const existing = await db.getOtpSession(cleanPhone);
     const now = Date.now();
     if (existing && now - existing.lastSentAt < config.rateLimitSeconds * 1000) {
       const remainingSeconds = Math.ceil((config.rateLimitSeconds * 1000 - (now - existing.lastSentAt)) / 1000);
@@ -55,8 +55,8 @@ router.post('/send-code', async (req: Request, res: Response): Promise<void> => 
       return;
     }
 
-    // Save session persistently
-    db.saveOtpSession(cleanPhone, result.requestId);
+    // Save session persistently in DB
+    await db.saveOtpSession(cleanPhone, result.requestId);
 
     console.log(`[TelegramGateway] Code sent via Telegram Gateway! RequestId: ${result.requestId}`);
 
@@ -90,15 +90,9 @@ router.post('/verify', async (req: Request, res: Response): Promise<void> => {
     }
 
     const cleanPhone = phone ? normalizePhone(phone) : '';
-    let session = cleanPhone ? db.getOtpSession(cleanPhone) : undefined;
+    let session = cleanPhone ? await db.getOtpSession(cleanPhone) : null;
     if (!session && requestId) {
-      // Find by requestId across otp requests
-      for (const [p, s] of db.otpRequests.entries()) {
-        if (s.requestId === requestId) {
-          session = s;
-          break;
-        }
-      }
+      session = await db.getOtpSessionByRequestId(requestId);
     }
 
     if (!session) {
@@ -124,7 +118,7 @@ router.post('/verify', async (req: Request, res: Response): Promise<void> => {
     const checkResult = await telegramGateway.checkVerificationStatus(session.requestId, cleanCode);
 
     if (!checkResult.codeValid) {
-      const attempts = db.incrementOtpAttempts(session.phone);
+      const attempts = await db.incrementOtpAttempts(session.phone);
       const remainingAttempts = Math.max(0, config.maxVerificationAttempts - attempts);
       res.status(400).json({
         error: "Kiritilgan kod noto'g'ri",
@@ -135,15 +129,15 @@ router.post('/verify', async (req: Request, res: Response): Promise<void> => {
     }
 
     // Verification successful! Clear session
-    db.deleteOtpSession(session.phone);
+    await db.deleteOtpSession(session.phone);
 
     const userPhone = session.phone;
-    let user = db.getUserByPhone(userPhone);
+    let user = await db.getUserByPhone(userPhone);
     let isNewUser = false;
 
     if (!user) {
       isNewUser = true;
-      user = {
+      user = await db.createUser({
         id: `u-${Date.now()}`,
         phone: userPhone,
         ism: '',
@@ -152,8 +146,7 @@ router.post('/verify', async (req: Request, res: Response): Promise<void> => {
         username: `user_${userPhone.slice(-4)}`,
         role: 'MASTER',
         createdAt: new Date().toISOString(),
-      };
-      db.createUser(user);
+      });
     } else if (!user.ism || !user.familiya) {
       isNewUser = true;
     }
@@ -203,7 +196,7 @@ router.post('/register-profile', authenticateToken, async (req: AuthRequest, res
     const fullName = `${cleanIsm} ${cleanFamiliya}`;
     const username = cleanIsm.toLowerCase().replace(/[^a-z0-9]/g, '') || `master_${userId.slice(-4)}`;
 
-    const updatedUser = db.updateUser(userId, {
+    const updatedUser = await db.updateUser(userId, {
       ism: cleanIsm,
       familiya: cleanFamiliya,
       fullName,

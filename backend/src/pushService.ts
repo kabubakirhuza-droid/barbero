@@ -36,7 +36,7 @@ export class PushService {
     return VAPID_PUBLIC_KEY;
   }
 
-  public saveSubscription(userId: string, subscription: any, device?: string): PushSubscriptionItem {
+  public async saveSubscription(userId: string, subscription: any, device?: string): Promise<PushSubscriptionItem> {
     const endpoint = subscription?.endpoint;
     const p256dh = subscription?.keys?.p256dh;
     const auth = subscription?.keys?.auth;
@@ -45,36 +45,32 @@ export class PushService {
       throw new Error('Noto‘g‘ri Push Subscription formati');
     }
 
-    // Remove existing subscription with same endpoint to avoid duplicates
-    db.pushSubscriptions = db.pushSubscriptions.filter((s) => s.endpoint !== endpoint);
-
     const newSub: PushSubscriptionItem = {
       id: `push-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
       userId: userId || 'u-1',
       endpoint,
-      p256dh,
-      auth,
+      keys: {
+        p256dh,
+        auth,
+      },
       device: device || 'Web Browser',
-      createdAt: new Date().toISOString(),
     };
 
-    db.pushSubscriptions.push(newSub);
-    console.log(`[PushService] Subscribed user ${userId} (${db.pushSubscriptions.length} total active subs)`);
+    await db.savePushSubscription(newSub);
+    console.log(`[PushService] Subscribed user ${userId} to PostgreSQL push_subscriptions`);
     return newSub;
   }
 
-  public removeSubscription(endpoint: string): boolean {
-    const before = db.pushSubscriptions.length;
-    db.pushSubscriptions = db.pushSubscriptions.filter((s) => s.endpoint !== endpoint);
-    return db.pushSubscriptions.length < before;
+  public async removeSubscription(endpoint: string): Promise<boolean> {
+    return db.deletePushSubscription(endpoint);
   }
 
-  public getUserSubscriptions(userId: string): PushSubscriptionItem[] {
-    return db.pushSubscriptions.filter((s) => s.userId === userId);
+  public async getUserSubscriptions(userId: string): Promise<PushSubscriptionItem[]> {
+    return db.getPushSubscriptions(userId);
   }
 
   public async sendNotificationToUser(userId: string, payload: PushPayload): Promise<{ sent: number; failed: number }> {
-    const subs = this.getUserSubscriptions(userId);
+    const subs = await this.getUserSubscriptions(userId);
     if (subs.length === 0) {
       console.log(`[PushService] No subscriptions for user ${userId}`);
       return { sent: 0, failed: 0 };
@@ -91,7 +87,7 @@ export class PushService {
       tag: payload.tag || 'barbero-general',
       data: {
         url: payload.data?.url || '/',
-        screen: payload.data?.screen || 'So\'rovlar',
+        screen: payload.data?.screen || "So'rovlar",
         ...payload.data,
       },
     });
@@ -101,8 +97,8 @@ export class PushService {
         const pushSubscription = {
           endpoint: sub.endpoint,
           keys: {
-            p256dh: sub.p256dh,
-            auth: sub.auth,
+            p256dh: sub.keys.p256dh,
+            auth: sub.keys.auth,
           },
         };
 
@@ -113,10 +109,10 @@ export class PushService {
         failed += 1;
         console.error(`[PushService] Failed to send push:`, error?.statusCode || error?.message);
 
-        // If subscription is 404 or 410 (expired/unregistered), delete it
+        // If subscription is 404 or 410 (expired/unregistered), delete it from DB
         if (error?.statusCode === 404 || error?.statusCode === 410) {
           console.log(`[PushService] Removing expired subscription ${sub.endpoint}`);
-          this.removeSubscription(sub.endpoint);
+          await this.removeSubscription(sub.endpoint);
         }
       }
     }
@@ -125,7 +121,7 @@ export class PushService {
   }
 
   public async sendTestNotification(userId: string, endpoint?: string): Promise<{ success: boolean; message: string }> {
-    let subs = this.getUserSubscriptions(userId);
+    let subs = await this.getUserSubscriptions(userId);
     if (endpoint) {
       const specific = subs.filter((s) => s.endpoint === endpoint);
       if (specific.length > 0) subs = specific;
@@ -143,7 +139,7 @@ export class PushService {
       body: 'Push-bildirishnomalar muvaffaqiyatli ishlayapti! Yangi so‘rovlar va eslatmalar shu tarzda keladi.',
       tag: 'barbero-test',
       data: {
-        screen: 'So\'rovlar',
+        screen: "So'rovlar",
         url: '/',
       },
     };

@@ -44,14 +44,37 @@ import path from 'path';
 const distPath = path.resolve(__dirname, '../../mobile/dist');
 app.use(express.static(distPath));
 
+import { pool } from './db';
+import { isJwtReady, isGatewayReady, isVapidReady } from './config';
+
 // Health check endpoint
-app.get(['/health', '/api/health'], (req, res) => {
+app.get(['/health', '/api/health'], async (req, res) => {
+  let dbStatus = config.databaseUrl ? 'missing' : 'missing';
+  if (config.databaseUrl) {
+    try {
+      await pool.query('SELECT 1');
+      dbStatus = 'connected';
+    } catch {
+      dbStatus = 'disconnected';
+    }
+  }
+
   res.json({
     status: 'ok',
+    app: APP_NAME,
     appName: APP_NAME,
-    appBaseUrl: APP_BASE_URL,
     version: '1.0.9',
     timestamp: new Date().toISOString(),
+    db: dbStatus,
+    gateway: isGatewayReady ? 'configured' : 'missing',
+    jwt: isJwtReady ? 'configured' : 'missing',
+    vapid: isVapidReady ? 'configured' : 'missing',
+    diagnostics: {
+      db: dbStatus,
+      gateway: isGatewayReady ? 'configured' : 'missing',
+      jwt: isJwtReady ? 'configured' : 'missing',
+      vapid: isVapidReady ? 'configured' : 'missing',
+    },
   });
 });
 

@@ -12,12 +12,17 @@ export interface AuthRequest extends Request {
   currentUser?: User;
 }
 
-export function authenticateToken(req: AuthRequest, res: Response, next: NextFunction): void {
+export async function authenticateToken(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.split(' ')[1] : null;
 
   if (!token) {
     res.status(401).json({ error: "Avtorizatsiyadan o'tilmagan. Iltimos, tizimga kiring", code: 'UNAUTHORIZED' });
+    return;
+  }
+
+  if (!config.jwtSecret) {
+    res.status(503).json({ error: "Xizmat vaqtincha sozlanmagan (JWT_SECRET missing)", code: 'SERVER_CONFIG_ERROR' });
     return;
   }
 
@@ -30,22 +35,8 @@ export function authenticateToken(req: AuthRequest, res: Response, next: NextFun
 
     req.user = decoded;
 
-    // Verify user exists in database or provision from verified token
-    let user = db.getUserById(decoded.userId);
-    if (!user && decoded.phone) {
-      user = {
-        id: decoded.userId,
-        phone: decoded.phone,
-        ism: '',
-        familiya: '',
-        fullName: '',
-        username: `user_${decoded.phone.slice(-4)}`,
-        role: decoded.role || 'MASTER',
-        createdAt: new Date().toISOString(),
-      };
-      db.createUser(user);
-    }
-
+    // Verify user exists in database
+    const user = await db.getUserById(decoded.userId);
     if (!user) {
       res.status(401).json({ error: "Foydalanuvchi topilmadi yoki sessiya eskirgan", code: 'USER_NOT_FOUND' });
       return;
@@ -58,11 +49,11 @@ export function authenticateToken(req: AuthRequest, res: Response, next: NextFun
   }
 }
 
-export function optionalAuth(req: AuthRequest, res: Response, next: NextFunction): void {
+export async function optionalAuth(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.split(' ')[1] : null;
 
-  if (token) {
+  if (token && config.jwtSecret) {
     try {
       const decoded = jwt.verify(token, config.jwtSecret) as {
         userId: string;
@@ -70,7 +61,7 @@ export function optionalAuth(req: AuthRequest, res: Response, next: NextFunction
         role?: 'MASTER' | 'CLIENT';
       };
       req.user = decoded;
-      req.currentUser = db.getUserById(decoded.userId) || undefined;
+      req.currentUser = (await db.getUserById(decoded.userId)) || undefined;
     } catch (e) {
       // ignore invalid token for optional endpoints
     }

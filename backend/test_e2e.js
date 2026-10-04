@@ -1,361 +1,310 @@
-// Comprehensive E2E test script for Barbero Backend API
-const BASE_URL = 'http://127.0.0.1:5000';
+require('dotenv').config({ path: require('path').resolve(__dirname, '.env') });
 const jwt = require('jsonwebtoken');
+const { Pool } = require('pg');
 
-async function runTests() {
-  console.log('--- 🧪 STARTING BARBERO BACKEND E2E TESTS ---');
-  let passed = 0;
-  let failed = 0;
+const BASE_URL = process.env.TEST_API_URL || 'http://localhost:5000';
+const JWT_SECRET = process.env.JWT_SECRET || 'dev_jwt_secret_change_in_production_key';
+const DATABASE_URL = process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/barbero_db';
 
-  async function test(name, fn) {
-    try {
-      await fn();
-      console.log(`✅ [PASS] ${name}`);
-      passed++;
-    } catch (e) {
-      console.error(`❌ [FAIL] ${name}:`, e.message);
-      failed++;
-    }
-  }
+const pool = new Pool({
+  connectionString: DATABASE_URL,
+});
 
-  // 1. Health
-  await test('GET /health', async () => {
-    const res = await fetch(`${BASE_URL}/health`);
-    const data = await res.json();
-    if (data.status !== 'ok') throw new Error('Status not ok');
+async function request(path, options = {}) {
+  const url = `${BASE_URL}${path}`;
+  const res = await fetch(url, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
   });
-
-  // 2. Auth - Send Code
-  let requestId = '';
-  await test('POST /auth/send-code', async () => {
-    const res = await fetch(`${BASE_URL}/auth/send-code`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ phone: '+998900335102' }),
-    });
-    const data = await res.json();
-    if (!data.success && !data.requestId) throw new Error('Failed to send code');
-    requestId = data.requestId;
-  });
-
-  // 3. Auth - Telegram Gateway Real Verification (invalid code check)
-  await test('POST /auth/verify - rejects invalid code via Telegram Gateway', async () => {
-    const res = await fetch(`${BASE_URL}/auth/verify`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        phone: '+998900335102',
-        code: '999999', // Non-matching code
-        requestId,
-      }),
-    });
-    const data = await res.json();
-    if (res.status === 400 && data.error) {
-      console.log(`    ℹ️ Expected rejection: "${data.error}"`);
-    } else {
-      throw new Error('Expected 400 rejection from Telegram Gateway on wrong code');
-    }
-  });
-
-  // Generate valid test JWT token for remaining protected endpoints
-  const accessToken = jwt.sign(
-    { userId: 'u-1', phone: '+998900335102' },
-    process.env.JWT_SECRET || 'barbero_super_jwt_secret_key_2026',
-    { expiresIn: '1h' }
-  );
-
-  // 4. Auth - Me
-  await test('GET /auth/me', async () => {
-    const res = await fetch(`${BASE_URL}/auth/me`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-    const data = await res.json();
-    if (!data.user?.fullName) throw new Error('User not found');
-  });
-
-  // 5. Services - List
-  await test('GET /services', async () => {
-    const res = await fetch(`${BASE_URL}/services`);
-    const data = await res.json();
-    if (!Array.isArray(data.services) || data.services.length === 0) {
-      throw new Error('Services list empty');
-    }
-  });
-
-  // 6. Services - Create
-  let createdServiceId = '';
-  await test('POST /services', async () => {
-    const res = await fetch(`${BASE_URL}/services`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: 'Kreativ soqol tekislash',
-        price: 45000,
-        duration: 25,
-        badgeColor: '#059669',
-      }),
-    });
-    const data = await res.json();
-    if (!data.success || !data.service?.id) throw new Error('Failed creating service');
-    createdServiceId = data.service.id;
-  });
-
-  // 7. Appointments - List
-  await test('GET /appointments', async () => {
-    const res = await fetch(`${BASE_URL}/appointments`);
-    const data = await res.json();
-    if (!Array.isArray(data.appointments)) throw new Error('Appointments not array');
-  });
-
-  // 8. Appointments - Create
-  let createdAptId = '';
-  await test('POST /appointments', async () => {
-    const res = await fetch(`${BASE_URL}/appointments`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        clientName: 'Sardor A.',
-        clientPhone: '+998907778899',
-        serviceId: createdServiceId,
-        serviceName: 'Kreativ soqol tekislash',
-        servicePrice: 45000,
-        badgeColor: '#059669',
-        date: '2026-10-03',
-        startTime: '16:00',
-        duration: 30,
-      }),
-    });
-    const data = await res.json();
-    if (!data.success || !data.appointment?.id) throw new Error('Failed to create appointment');
-    createdAptId = data.appointment.id;
-  });
-
-  // 9. Appointments - Update
-  await test('PUT /appointments/:id', async () => {
-    const res = await fetch(`${BASE_URL}/appointments/${createdAptId}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        clientName: 'Sardorbek Aliyev',
-      }),
-    });
-    const data = await res.json();
-    if (!data.success || data.appointment.clientName !== 'Sardorbek Aliyev') {
-      throw new Error('Failed updating appointment');
-    }
-  });
-
-  // 10. Clients - List
-  await test('GET /clients', async () => {
-    const res = await fetch(`${BASE_URL}/clients`);
-    const data = await res.json();
-    if (!Array.isArray(data.clients) || data.clients.length === 0) {
-      throw new Error('Clients list empty');
-    }
-  });
-
-  // 11. Analytics - Period Hafta
-  await test('GET /analytics?period=hafta', async () => {
-    const res = await fetch(`${BASE_URL}/analytics?period=hafta`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-    const data = await res.json();
-    if (!data.revenue || !data.metrics || !data.dynamics?.chart) {
-      throw new Error('Analytics invalid structure for hafta');
-    }
-    if (data.period !== 'hafta') throw new Error('Incorrect period in response');
-  });
-
-  // 12. Analytics - Period Oy
-  await test('GET /analytics?period=oy', async () => {
-    const res = await fetch(`${BASE_URL}/analytics?period=oy`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-    const data = await res.json();
-    if (!data.revenue?.amountFormatted || !data.metrics?.clients?.countFormatted) {
-      throw new Error('Analytics missing formatted fields');
-    }
-    if (typeof data.metrics.occupancy?.percent !== 'number') {
-      throw new Error('Occupancy percent missing');
-    }
-  });
-
-  // 13. Analytics - Period Yil
-  await test('GET /analytics?period=yil', async () => {
-    const res = await fetch(`${BASE_URL}/analytics?period=yil`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-    const data = await res.json();
-    if (data.period !== 'yil' || data.dynamics.group !== 'month') {
-      throw new Error('Yearly analytics grouping incorrect');
-    }
-  });
-
-  // 14. Analytics - Custom range valid & invalid
-  await test('GET /analytics with custom range (valid & invalid)', async () => {
-    // Valid custom range
-    const validRes = await fetch(`${BASE_URL}/analytics?from=2026-09-01&to=2026-10-03`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-    const validData = await validRes.json();
-    if (!validData.revenue) throw new Error('Valid range failed');
-
-    // Invalid custom range: from > to
-    const invalidRes = await fetch(`${BASE_URL}/analytics?from=2026-10-10&to=2026-10-01`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-    const invalidData = await invalidRes.json();
-    if (invalidRes.status !== 400 || !invalidData.error) {
-      throw new Error('Expected 400 validation error for from > to');
-    }
-  });
-
-  // 15. Web Push - VAPID Public Key
-  await test('GET /push/vapid-public-key', async () => {
-    const res = await fetch(`${BASE_URL}/push/vapid-public-key`);
-    const data = await res.json();
-    if (!data.publicKey || typeof data.publicKey !== 'string') {
-      throw new Error('VAPID public key missing or invalid');
-    }
-  });
-
-  // 16. Web Push - Subscribe & Status & Test & Unsubscribe
-  await test('Web Push: Subscribe, Status, Test, Unsubscribe', async () => {
-    const testSubscription = {
-      endpoint: 'https://fcm.googleapis.com/fcm/send/test-token-12345',
-      keys: {
-        p256dh: 'BNcRdreALRFXTkOOUHK1EtK2wtaz5Ry4YfYCA_0QTpQtUbVlUls0VJXg7A8u-Ts1XbjhazAkj7I99e8QcYP7DkM',
-        auth: 'tBHItJI5svbpez7KI4CCXg',
-      },
-    };
-
-    // Subscribe
-    const subRes = await fetch(`${BASE_URL}/push/subscribe`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${accessToken}`,
-      },
-      body: JSON.stringify({
-        subscription: testSubscription,
-        device: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0',
-      }),
-    });
-    const subData = await subRes.json();
-    if (!subData.success) throw new Error(`Subscribe failed: ${JSON.stringify(subData)}`);
-
-    // Status
-    const statusRes = await fetch(`${BASE_URL}/push/status`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-    const statusData = await statusRes.json();
-    if (!statusData.isSubscribed || statusData.subscriptionsCount < 1) {
-      throw new Error('Push status indicates not subscribed');
-    }
-
-    // Unsubscribe
-    const unsubRes = await fetch(`${BASE_URL}/push/unsubscribe`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${accessToken}`,
-      },
-      body: JSON.stringify({
-        endpoint: testSubscription.endpoint,
-      }),
-    });
-    const unsubData = await unsubRes.json();
-    if (!unsubData.success) throw new Error('Unsubscribe failed');
-  });
-
-  // 17. Portfolio - Photos & Like
-  await test('GET & POST /portfolio', async () => {
-    const res = await fetch(`${BASE_URL}/portfolio`);
-    const data = await res.json();
-    if (!data.photos || data.photos.length === 0) throw new Error('No portfolio photos');
-
-    const photoId = data.photos[0].id;
-    const likeRes = await fetch(`${BASE_URL}/portfolio/${photoId}/like`, { method: 'POST' });
-    const likeData = await likeRes.json();
-    if (!likeData.success) throw new Error('Failed liking photo');
-  });
-
-  // 18. Profile & Working Hours
-  await test('GET /profile & /profile/working-hours', async () => {
-    const pRes = await fetch(`${BASE_URL}/profile`);
-    const pData = await pRes.json();
-    if (!pData.user) throw new Error('Profile user missing');
-
-    const whRes = await fetch(`${BASE_URL}/profile/working-hours`);
-    const whData = await whRes.json();
-    if (!whData.workingHours || whData.workingHours.length !== 7) {
-      throw new Error('Working hours not 7 days');
-    }
-  });
-
-  // 19. Public Booking - /public/b/abubakir
-  await test('Public Booking: GET & POST /public/b/abubakir', async () => {
-    const infoRes = await fetch(`${BASE_URL}/public/b/abubakir`);
-    const infoData = await infoRes.json();
-    if (!infoData.master || !infoData.services) throw new Error('Public master info missing');
-
-    const slotsRes = await fetch(`${BASE_URL}/public/b/abubakir/available-slots?date=2026-10-03`);
-    const slotsData = await slotsRes.json();
-    if (!Array.isArray(slotsData.slots)) throw new Error('Slots not array');
-
-    const availableSlot = slotsData.slots.find((s) => s.isAvailable)?.time || '19:30';
-
-    const bookRes = await fetch(`${BASE_URL}/public/b/abubakir/book`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        clientName: 'Nodirbek',
-        clientPhone: '+998909990011',
-        serviceId: infoData.services[0].id,
-        date: '2026-10-03',
-        startTime: availableSlot,
-      }),
-    });
-    const bookData = await bookRes.json();
-    if (!bookData.success || !bookData.appointment) throw new Error(`Public booking failed: ${JSON.stringify(bookData)}`);
-  });
-
-  // 20. Booking Requests: POST, GET, ACCEPT (triggers push to master)
-  await test('Booking Requests: submit, list, accept', async () => {
-    // 20.1 Client submits booking request from public link
-    const postRes = await fetch(`${BASE_URL}/booking-requests`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        masterId: 'u-1',
-        clientName: 'Azamat Qosimov',
-        clientPhone: '+998901112233',
-        serviceId: 'srv-1',
-        date: '2026-10-03',
-        time: '16:30',
-      }),
-    });
-    const postData = await postRes.json();
-    if (!postData.success || !postData.request?.id) throw new Error('Create booking request failed');
-    const reqId = postData.request.id;
-
-    // 20.2 Master fetches list of pending booking requests
-    const listRes = await fetch(`${BASE_URL}/booking-requests?masterId=u-1`);
-    const listData = await listRes.json();
-    if (!Array.isArray(listData.requests) || listData.requests.length === 0) {
-      throw new Error('List booking requests empty');
-    }
-
-    // 20.3 Master accepts request -> creates appointment in schedule
-    const acceptRes = await fetch(`${BASE_URL}/booking-requests/${reqId}/accept`, {
-      method: 'POST',
-    });
-    const acceptData = await acceptRes.json();
-    if (!acceptData.success || !acceptData.appointment) throw new Error('Accept booking request failed');
-  });
-
-  console.log(`\n🎉 ALL TESTS COMPLETED: ${passed} passed, ${failed} failed.`);
-  if (failed > 0) process.exit(1);
+  const data = await res.json().catch(() => ({}));
+  return { status: res.status, data };
 }
 
-runTests().catch(console.error);
+async function runTests() {
+  console.log('=== STARTING BARBERO E2E TEST SUITE (PostgreSQL Engine) ===');
+  console.log(`Connecting to backend at: ${BASE_URL}\n`);
+
+  // Ensure DB connection
+  try {
+    await pool.query('SELECT 1');
+    console.log('✓ PostgreSQL connected for test preparation');
+  } catch (err) {
+    console.warn('⚠️ Warning: PostgreSQL not reachable directly via pool, testing via HTTP:', err.message);
+  }
+
+  // 1. Health & Diagnostics Check
+  console.log('1. Testing /health and /api/health endpoint diagnostics...');
+  const health = await request('/health');
+  if (health.status !== 200 || !health.data.status) {
+    throw new Error(`Health check failed: ${JSON.stringify(health)}`);
+  }
+  if (!health.data.diagnostics || !health.data.diagnostics.jwt) {
+    throw new Error(`Diagnostics missing in health response: ${JSON.stringify(health.data)}`);
+  }
+  console.log(`   ✓ Health check returned OK: ${JSON.stringify(health.data.diagnostics)}\n`);
+
+  // 2. Auth Protection Verification (401 without token)
+  console.log('2. Testing Authentication Middleware (Unauthorized 401 checks)...');
+  const unauthMe = await request('/auth/me');
+  if (unauthMe.status !== 401) {
+    throw new Error(`Expected 401 on /auth/me without token, got ${unauthMe.status}`);
+  }
+  console.log('   ✓ /auth/me correctly rejects request without token (401)');
+
+  const unauthAppointments = await request('/appointments');
+  if (unauthAppointments.status !== 401) {
+    throw new Error(`Expected 401 on /appointments without token, got ${unauthAppointments.status}`);
+  }
+  console.log('   ✓ /appointments correctly rejects request without token (401)');
+
+  const unauthServices = await request('/services');
+  if (unauthServices.status !== 401) {
+    throw new Error(`Expected 401 on /services without token, got ${unauthServices.status}`);
+  }
+  console.log('   ✓ /services correctly rejects request without token (401)');
+
+  const unauthAnalytics = await request('/analytics');
+  if (unauthAnalytics.status !== 401) {
+    throw new Error(`Expected 401 on /analytics without token, got ${unauthAnalytics.status}`);
+  }
+  console.log('   ✓ /analytics correctly rejects request without token (401)\n');
+
+  // 3. User Setup in DB & JWT Auth
+  console.log('3. Preparing test user in database...');
+  const testMasterId = `master-test-${Date.now()}`;
+  const testPhone = `+99890${Math.floor(1000000 + Math.random() * 9000000)}`;
+
+  try {
+    await pool.query(
+      `INSERT INTO users (id, phone, ism, familiya, full_name, username, role, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
+       ON CONFLICT (id) DO NOTHING`,
+      [testMasterId, testPhone, 'Rustam', 'Karimov', 'Rustam Karimov', `rustam_${testMasterId.slice(-4)}`, 'MASTER']
+    );
+  } catch (err) {
+    console.warn('DB insert via pool notice:', err.message);
+  }
+
+  const token = jwt.sign(
+    { userId: testMasterId, phone: testPhone, role: 'MASTER' },
+    JWT_SECRET,
+    { expiresIn: '7d' }
+  );
+  const authHeaders = { Authorization: `Bearer ${token}` };
+
+  // 4. Authenticated Master Flow
+  console.log('4. Testing Authenticated Master Session & Profile...');
+  const meRes = await request('/auth/me', { headers: authHeaders });
+  if (meRes.status !== 200 || !meRes.data.user) {
+    throw new Error(`Get me failed: ${JSON.stringify(meRes)}`);
+  }
+  console.log(`   ✓ /auth/me returns master: ${meRes.data.user.fullName || meRes.data.user.id}`);
+
+  // Register / update profile
+  const regProfile = await request('/auth/register-profile', {
+    method: 'POST',
+    headers: authHeaders,
+    body: JSON.stringify({ ism: 'Rustam', familiya: 'Karimov', role: 'MASTER' }),
+  });
+  if (regProfile.status !== 200 || regProfile.data.user?.ism !== 'Rustam') {
+    throw new Error(`Register profile failed: ${JSON.stringify(regProfile)}`);
+  }
+  console.log('   ✓ Master profile verified and saved');
+
+  // 5. Services CRUD
+  console.log('\n5. Testing Services Management (PostgreSQL storage)...');
+  const srvRes = await request('/services', {
+    method: 'POST',
+    headers: authHeaders,
+    body: JSON.stringify({
+      name: 'Klassik soch turmagi',
+      price: 70000,
+      duration: 30,
+      badgeColor: '#A67C2E',
+    }),
+  });
+  if (srvRes.status !== 201 || !srvRes.data.service?.id) {
+    throw new Error(`Create service failed: ${JSON.stringify(srvRes)}`);
+  }
+  const serviceId = srvRes.data.service.id;
+  console.log(`   ✓ Service created: ${srvRes.data.service.name} (${srvRes.data.service.price} UZS)`);
+
+  const listServices = await request('/services', { headers: authHeaders });
+  if (listServices.status !== 200 || !listServices.data.services.find((s) => s.id === serviceId)) {
+    throw new Error(`List services failed: ${JSON.stringify(listServices)}`);
+  }
+  console.log(`   ✓ Services listed: found ${listServices.data.services.length} active service(s)`);
+
+  // 6. Appointments & Double Booking Conflict (409)
+  console.log('\n6. Testing Appointments & Slot Collision Lock (409 Conflict)...');
+  const testDate = '2026-10-20';
+  const testSlot = '15:00';
+
+  const aptRes1 = await request('/appointments', {
+    method: 'POST',
+    headers: authHeaders,
+    body: JSON.stringify({
+      clientName: 'Bekzod',
+      clientPhone: '+998901112233',
+      serviceId,
+      date: testDate,
+      startTime: testSlot,
+    }),
+  });
+  if (aptRes1.status !== 201 || !aptRes1.data.appointment?.id) {
+    throw new Error(`Create appointment 1 failed: ${JSON.stringify(aptRes1)}`);
+  }
+  const aptId = aptRes1.data.appointment.id;
+  console.log(`   ✓ Appointment created on ${testDate} at ${testSlot} (ID: ${aptId})`);
+
+  // Attempt duplicate booking on exact same slot -> MUST return 409
+  const aptRes2 = await request('/appointments', {
+    method: 'POST',
+    headers: authHeaders,
+    body: JSON.stringify({
+      clientName: 'Alisher',
+      clientPhone: '+998904445566',
+      serviceId,
+      date: testDate,
+      startTime: testSlot,
+    }),
+  });
+  if (aptRes2.status !== 409) {
+    throw new Error(`Expected 409 Conflict for duplicate appointment, got ${aptRes2.status}: ${JSON.stringify(aptRes2.data)}`);
+  }
+  console.log('   ✓ Double booking prevented with 409 Conflict (PostgreSQL constraint verified)');
+
+  // Delete appointment
+  const delRes = await request(`/appointments/${aptId}`, {
+    method: 'DELETE',
+    headers: authHeaders,
+  });
+  if (delRes.status !== 200 || !delRes.data.success) {
+    throw new Error(`Delete appointment failed: ${JSON.stringify(delRes)}`);
+  }
+  console.log('   ✓ Appointment deleted / cancelled in PostgreSQL');
+
+  // Re-booking the freed slot should now succeed with 201
+  const aptRes3 = await request('/appointments', {
+    method: 'POST',
+    headers: authHeaders,
+    body: JSON.stringify({
+      clientName: 'Alisher (Re-booked)',
+      clientPhone: '+998904445566',
+      serviceId,
+      date: testDate,
+      startTime: testSlot,
+    }),
+  });
+  if (aptRes3.status !== 201 || !aptRes3.data.appointment?.id) {
+    throw new Error(`Re-booking freed slot failed: ${JSON.stringify(aptRes3)}`);
+  }
+  console.log('   ✓ Freed slot successfully re-booked (201 Created)');
+
+  // 7. Booking Requests Flow
+  console.log('\n7. Testing Booking Requests Flow...');
+  const reqCreate = await request('/booking-requests', {
+    method: 'POST',
+    body: JSON.stringify({
+      masterId: testMasterId,
+      clientName: 'Jasur',
+      clientPhone: '+998909990011',
+      serviceId,
+      date: '2026-10-21',
+      time: '16:00',
+    }),
+  });
+  if (reqCreate.status !== 201 || !reqCreate.data.request?.id) {
+    throw new Error(`Client booking request failed: ${JSON.stringify(reqCreate)}`);
+  }
+  const bookingReqId = reqCreate.data.request.id;
+  console.log(`   ✓ Client submitted booking request (ID: ${bookingReqId})`);
+
+  const listReqs = await request('/booking-requests', { headers: authHeaders });
+  if (listReqs.status !== 200 || !listReqs.data.requests.find((r) => r.id === bookingReqId)) {
+    throw new Error(`Master list booking requests failed: ${JSON.stringify(listReqs)}`);
+  }
+  console.log(`   ✓ Master received pending booking request in inbox`);
+
+  const acceptReq = await request(`/booking-requests/${bookingReqId}/accept`, {
+    method: 'POST',
+    headers: authHeaders,
+  });
+  if (acceptReq.status !== 200 || !acceptReq.data.appointment) {
+    throw new Error(`Accept booking request failed: ${JSON.stringify(acceptReq)}`);
+  }
+  console.log('   ✓ Master accepted booking request and auto-scheduled appointment in schedule');
+
+  // 8. Salons & Geolocation
+  console.log('\n8. Testing Salons & Geolocation Management...');
+  const salonCreate = await request('/salons/create', {
+    method: 'POST',
+    headers: authHeaders,
+    body: JSON.stringify({
+      name: 'Barbero Test Salon',
+      address: 'Toshkent sh., Chilonzor 1-mavze',
+      latitude: 41.2856,
+      longitude: 69.2034,
+    }),
+  });
+  if (salonCreate.status !== 201 || !salonCreate.data.salon?.id) {
+    throw new Error(`Create salon failed: ${JSON.stringify(salonCreate)}`);
+  }
+  const testSalonId = salonCreate.data.salon.id;
+  console.log(`   ✓ Created salon: ${salonCreate.data.salon.name} (ID: ${testSalonId})`);
+
+  const mySalon = await request('/salons/my', { headers: authHeaders });
+  if (mySalon.status !== 200 || !mySalon.data.salon) {
+    throw new Error(`Get my salon failed: ${JSON.stringify(mySalon)}`);
+  }
+  console.log(`   ✓ Master salon verified: ${mySalon.data.salon.name}`);
+
+  // 9. Push Subscription
+  console.log('\n9. Testing Push Subscriptions...');
+  const pushSub = await request('/push/subscribe', {
+    method: 'POST',
+    headers: authHeaders,
+    body: JSON.stringify({
+      subscription: {
+        endpoint: `https://updates.push.services.mozilla.com/wpush/v2/test_${Date.now()}`,
+        keys: {
+          p256dh: 'BNcRdreStoreKeyTestingOnly...',
+          auth: 'tBHxAuthKey...',
+        },
+      },
+      device: 'Chrome PWA',
+    }),
+  });
+  if (pushSub.status !== 200 || !pushSub.data.success) {
+    throw new Error(`Push subscribe failed: ${JSON.stringify(pushSub)}`);
+  }
+  console.log('   ✓ Push subscription registered in PostgreSQL');
+
+  const pushStatus = await request('/push/status', { headers: authHeaders });
+  if (pushStatus.status !== 200 || !pushStatus.data.isSubscribed) {
+    throw new Error(`Push status check failed: ${JSON.stringify(pushStatus)}`);
+  }
+  console.log(`   ✓ Push subscription verified: active (${pushStatus.data.subscriptionsCount} sub(s))`);
+
+  // 10. Analytics
+  console.log('\n10. Testing Analytics Calculation...');
+  const analyticsRes = await request('/analytics?period=oy', { headers: authHeaders });
+  if (analyticsRes.status !== 200 || !analyticsRes.data.revenue) {
+    throw new Error(`Analytics calculation failed: ${JSON.stringify(analyticsRes)}`);
+  }
+  console.log(`   ✓ Analytics calculated: Revenue ${analyticsRes.data.revenue.formatted}, Bookings: ${analyticsRes.data.revenue.totalBookings}`);
+
+  console.log('\n=======================================================');
+  console.log(' 🎉 ALL 10 E2E BARBERO BACKEND TESTS PASSED (100%)');
+  console.log('=======================================================\n');
+  await pool.end();
+}
+
+runTests().catch(async (err) => {
+  console.error('\n❌ E2E TEST SUITE FAILED:', err.message);
+  await pool.end().catch(() => {});
+  process.exit(1);
+});

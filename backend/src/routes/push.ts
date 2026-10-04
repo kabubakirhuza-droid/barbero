@@ -13,7 +13,7 @@ router.get('/vapid-public-key', (req: Request, res: Response): void => {
 });
 
 // POST /push/subscribe (Protected: binds subscription to authenticated user)
-router.post('/subscribe', authenticateToken, (req: AuthRequest, res: Response): void => {
+router.post('/subscribe', authenticateToken, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const userId = req.user!.userId;
     const { subscription, device } = req.body;
@@ -22,7 +22,7 @@ router.post('/subscribe', authenticateToken, (req: AuthRequest, res: Response): 
       return;
     }
 
-    const saved = pushService.saveSubscription(userId, subscription, device);
+    const saved = await pushService.saveSubscription(userId, subscription, device);
     res.json({
       success: true,
       message: 'Push-bildirishnomalarga muvaffaqiyatli obuna bo‘lindi',
@@ -34,7 +34,7 @@ router.post('/subscribe', authenticateToken, (req: AuthRequest, res: Response): 
 });
 
 // POST /push/unsubscribe (Protected)
-router.post('/unsubscribe', authenticateToken, (req: AuthRequest, res: Response): void => {
+router.post('/unsubscribe', authenticateToken, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { endpoint } = req.body;
     if (!endpoint) {
@@ -42,7 +42,7 @@ router.post('/unsubscribe', authenticateToken, (req: AuthRequest, res: Response)
       return;
     }
 
-    const removed = pushService.removeSubscription(endpoint);
+    const removed = await pushService.removeSubscription(endpoint);
     res.json({
       success: true,
       removed,
@@ -70,20 +70,24 @@ router.post('/test', authenticateToken, async (req: AuthRequest, res: Response):
 });
 
 // GET /push/status (Protected)
-router.get('/status', authenticateToken, (req: AuthRequest, res: Response): void => {
-  const userId = req.user!.userId;
-  const subs = pushService.getUserSubscriptions(userId);
-  res.json({
-    active: subs.length > 0,
-    isSubscribed: subs.length > 0,
-    count: subs.length,
-    subscriptionsCount: subs.length,
-    subscriptions: subs.map((s) => ({
-      id: s.id,
-      device: s.device,
-      createdAt: s.createdAt,
-    })),
-  });
+router.get('/status', authenticateToken, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.user!.userId;
+    const subs = await pushService.getUserSubscriptions(userId);
+    res.json({
+      active: subs.length > 0,
+      isSubscribed: subs.length > 0,
+      count: subs.length,
+      subscriptionsCount: subs.length,
+      subscriptions: subs.map((s) => ({
+        id: s.id,
+        device: s.device,
+        createdAt: s.createdAt,
+      })),
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Push holatini tekshirishda xatolik yuz berdi' });
+  }
 });
 
 export default router;

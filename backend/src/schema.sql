@@ -1,6 +1,5 @@
--- Barbero PostgreSQL with PostGIS Schema
+-- Barbero PostgreSQL Database Schema
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-CREATE EXTENSION IF NOT EXISTS "postgis";
 
 -- 1. Users table (Barber / Beauty Master / Client)
 CREATE TABLE IF NOT EXISTS users (
@@ -33,13 +32,9 @@ CREATE TABLE IF NOT EXISTS salons (
   address TEXT NOT NULL,
   latitude DOUBLE PRECISION NOT NULL,
   longitude DOUBLE PRECISION NOT NULL,
-  location GEOGRAPHY(Point, 4326),
   created_by VARCHAR(64) REFERENCES users(id) ON DELETE SET NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
-
--- Index for PostGIS spatial searches within 50 meters
-CREATE INDEX IF NOT EXISTS idx_salons_location ON salons USING GIST(location);
 
 -- 4. Salon Members table (Masters working in this salon)
 CREATE TABLE IF NOT EXISTS salon_members (
@@ -152,7 +147,7 @@ CREATE TABLE IF NOT EXISTS user_settings (
   daily_reminder_active BOOLEAN DEFAULT TRUE,
   daily_reminder_time VARCHAR(10) DEFAULT '09:00',
   client_sms_reminder_active BOOLEAN DEFAULT TRUE,
-  theme VARCHAR(20) DEFAULT 'system', -- light | dark | system
+  theme VARCHAR(20) DEFAULT 'system',
   app_language VARCHAR(10) DEFAULT 'uz',
   security_pin VARCHAR(4),
   biometrics_enabled BOOLEAN DEFAULT FALSE
