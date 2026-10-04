@@ -183,6 +183,16 @@ export class Database {
         await pool.query(schemaSql);
         console.log('✅ [PostgreSQL] Database schema initialized and verified');
       }
+
+      // Safe schema adjustments for seamless client booking & flexible services
+      try {
+        await pool.query(`
+          ALTER TABLE appointments ALTER COLUMN client_phone DROP NOT NULL;
+          ALTER TABLE appointments ALTER COLUMN client_phone SET DEFAULT '';
+          ALTER TABLE appointments ALTER COLUMN service_id DROP NOT NULL;
+        `);
+      } catch (_) {}
+
       this.isInitialized = true;
     } catch (error: any) {
       console.warn('⚠️ [PostgreSQL] Schema init notice:', error.message);
@@ -245,6 +255,32 @@ export class Database {
         user.role || 'MASTER',
       ]
     );
+
+    // Auto-seed 5 default services for new master
+    if (user.role === 'MASTER') {
+      try {
+        const srvCheck = await this.query('SELECT id FROM services WHERE user_id = $1 LIMIT 1', [user.id]);
+        if (srvCheck.rows.length === 0) {
+          const defaultServices = [
+            { name: 'Soch olish', price: 50000, color: '#A67C2E' },
+            { name: 'Soch + soqol', price: 70000, color: '#2563EB' },
+            { name: 'Bolalar sochi', price: 30000, color: '#10B981' },
+            { name: 'Soqol olish', price: 30000, color: '#F59E0B' },
+            { name: 'Kreativ soqol tekislash', price: 45000, color: '#8B5CF6' },
+          ];
+          for (let i = 0; i < defaultServices.length; i++) {
+            const s = defaultServices[i];
+            await this.query(
+              `INSERT INTO services (id, user_id, name, price, duration, badge_color, is_active, created_at, updated_at)
+               VALUES ($1, $2, $3, $4, 30, $5, TRUE, NOW(), NOW())
+               ON CONFLICT (id) DO NOTHING`,
+              [`srv-${user.id}-${i + 1}`, user.id, s.name, s.price, s.color]
+            );
+          }
+        }
+      } catch (_) {}
+    }
+
     return this.mapUser(res.rows[0]);
   }
 
@@ -594,6 +630,19 @@ export class Database {
 
   public async createAppointment(apt: Appointment): Promise<Appointment> {
     try {
+      // Validate serviceId exists or set to null to avoid foreign key failure
+      let validServiceId = apt.serviceId || null;
+      if (validServiceId) {
+        try {
+          const srvCheck = await this.query('SELECT id FROM services WHERE id = $1 LIMIT 1', [validServiceId]);
+          if (srvCheck.rows.length === 0) {
+            validServiceId = null;
+          }
+        } catch (_) {
+          validServiceId = null;
+        }
+      }
+
       const res = await this.query(
         `INSERT INTO appointments (
            id, user_id, client_id, client_name, client_phone,
@@ -607,10 +656,10 @@ export class Database {
           apt.userId,
           apt.clientId || null,
           apt.clientName,
-          apt.clientPhone,
-          apt.serviceId,
-          apt.serviceName,
-          apt.servicePrice,
+          apt.clientPhone || '',
+          validServiceId,
+          apt.serviceName || 'Soch olish',
+          apt.servicePrice || 50000,
           apt.badgeColor || '#A67C2E',
           apt.date,
           apt.startTime,
@@ -628,6 +677,7 @@ export class Database {
         error.code = 'SLOT_OCCUPIED';
         throw error;
       }
+      console.error('[DB createAppointment error]:', err);
       throw err;
     }
   }
@@ -638,7 +688,17 @@ export class Database {
 
     const clientName = updates.clientName !== undefined ? updates.clientName : existing.clientName;
     const clientPhone = updates.clientPhone !== undefined ? updates.clientPhone : existing.clientPhone;
-    const serviceId = updates.serviceId !== undefined ? updates.serviceId : existing.serviceId;
+    let serviceId = updates.serviceId !== undefined ? updates.serviceId : existing.serviceId;
+    if (serviceId) {
+      try {
+        const srvCheck = await this.query('SELECT id FROM services WHERE id = $1 LIMIT 1', [serviceId]);
+        if (srvCheck.rows.length === 0) {
+          serviceId = null as any;
+        }
+      } catch (_) {
+        serviceId = null as any;
+      }
+    }
     const serviceName = updates.serviceName !== undefined ? updates.serviceName : existing.serviceName;
     const servicePrice = updates.servicePrice !== undefined ? updates.servicePrice : existing.servicePrice;
     const badgeColor = updates.badgeColor !== undefined ? updates.badgeColor : existing.badgeColor;
