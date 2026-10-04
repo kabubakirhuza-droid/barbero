@@ -48,7 +48,7 @@ export const InactiveClientsModal: React.FC<InactiveClientsModalProps> = ({
 
   const handleSendReminder = (client: any) => {
     const rawName = client.name || 'Mijoz';
-    const message = `Assalomu alaykum ${rawName}! Barbero ustangiz sizni kutmoqda, sochingizni yangilash vaqti keldi ✂️`;
+    const message = `Assalomu alaykum ${rawName}! BarberPlan ustangiz sizni kutmoqda, sochingizni yangilash vaqti keldi ✂️`;
     
     // Clean phone
     let phoneDigits = (client.phone || '').replace(/\D/g, '');

@@ -511,6 +511,12 @@ export const ProfilScreen: React.FC<ProfilScreenProps> = ({ onLogout, onOpenAddS
         onClose={() => setIsHelpVisible(false)}
       />
 
+      {/* Legal Docs modal */}
+      <LegalDocsModal
+        visible={isLegalDocsVisible}
+        onClose={() => setIsLegalDocsVisible(false)}
+      />
+
       {/* Appearance modal sheet */}
       <BottomSheet
         visible={isAppearanceSheetVisible}

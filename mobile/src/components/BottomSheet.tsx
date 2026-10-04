@@ -9,7 +9,7 @@ import {
   Platform,
 } from 'react-native';
 import { X } from 'lucide-react-native';
-import { colors } from '../theme/colors';
+import { colors } from '../theme/theme';
 
 interface BottomSheetProps {
   visible: boolean;
@@ -33,53 +33,60 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
       animationType="slide"
       onRequestClose={onClose}
     >
-      <TouchableWithoutFeedback onPress={onClose}>
-        <View style={styles.overlay} />
-      </TouchableWithoutFeedback>
+      <View style={styles.modalRoot}>
+        <TouchableWithoutFeedback onPress={onClose}>
+          <View style={styles.overlay} />
+        </TouchableWithoutFeedback>
 
-      <View style={styles.sheetContainer}>
-        {/* Drag handle */}
-        <View style={styles.handleContainer}>
-          <View style={styles.handle} />
-        </View>
-
-        {/* Header */}
-        <View style={styles.header}>
-          <Text style={styles.title}>{title}</Text>
-          <View style={styles.rightActions}>
-            {rightAction}
-            <TouchableOpacity onPress={onClose} style={styles.closeBtn} activeOpacity={0.7}>
-              <X size={20} color={colors.textSecondary} />
-            </TouchableOpacity>
+        <View style={styles.sheetContainer}>
+          {/* Drag handle */}
+          <View style={styles.handleContainer}>
+            <View style={styles.handle} />
           </View>
-        </View>
 
-        {/* Body */}
-        <View style={styles.content}>{children}</View>
+          {/* Header */}
+          <View style={styles.header}>
+            <Text style={styles.title}>{title}</Text>
+            <View style={styles.rightActions}>
+              {rightAction}
+              <TouchableOpacity onPress={onClose} style={styles.closeBtn} activeOpacity={0.7}>
+                <X size={20} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Body */}
+          <View style={styles.content}>{children}</View>
+        </View>
       </View>
     </Modal>
   );
 };
 
 const styles = StyleSheet.create({
-  overlay: {
+  modalRoot: {
     flex: 1,
-    backgroundColor: 'rgba(20, 16, 10, 0.45)',
+    justifyContent: 'flex-end',
+    backgroundColor: 'transparent',
+  },
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(15, 23, 42, 0.45)',
   },
   sheetContainer: {
-    backgroundColor: colors.card,
+    backgroundColor: colors.surface || '#FFFFFF',
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     paddingHorizontal: 20,
     paddingBottom: Platform.OS === 'ios' ? 40 : 24,
     borderTopWidth: 1,
     borderColor: colors.cardBorder,
-    shadowColor: colors.shadowColor,
+    shadowColor: '#000000',
     shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.15,
     shadowRadius: 16,
     elevation: 20,
-    maxHeight: '90%',
+    maxHeight: '85%',
   },
   handleContainer: {
     alignItems: 'center',
@@ -97,11 +104,10 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: colors.cardBorderSubtle,
-    marginBottom: 16,
+    borderBottomColor: colors.cardBorder,
   },
   title: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '700',
     color: colors.textPrimary,
   },
@@ -111,14 +117,10 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   closeBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: colors.background,
-    alignItems: 'center',
-    justifyContent: 'center',
+    padding: 4,
+    borderRadius: 8,
   },
   content: {
-    // child content
+    paddingVertical: 16,
   },
 });

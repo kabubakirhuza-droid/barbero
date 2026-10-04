@@ -63,7 +63,7 @@ export const BarberoLogo: React.FC<BarberoLogoProps> = ({
             },
           ]}
         >
-          BARBERO
+          BARBERPLAN
         </Text>
         {showSubtitle && (
           <Text style={[styles.brandSubtitle, { color: dark ? '#60A5FA' : colors.textSecondary }]}>
@@ -74,6 +74,8 @@ export const BarberoLogo: React.FC<BarberoLogoProps> = ({
     </View>
   );
 };
+
+export const BarberPlanLogo = BarberoLogo;
 
 const styles = StyleSheet.create({
   container: {

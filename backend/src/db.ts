@@ -197,8 +197,8 @@ export class Database {
             id VARCHAR(64) PRIMARY KEY,
             phone VARCHAR(20) NOT NULL UNIQUE,
             ism VARCHAR(60) DEFAULT 'Master',
-            familiya VARCHAR(60) DEFAULT 'Barbero',
-            full_name VARCHAR(120) DEFAULT 'Barbero Master',
+            familiya VARCHAR(60) DEFAULT 'BarberPlan',
+            full_name VARCHAR(120) DEFAULT 'BarberPlan Master',
             username VARCHAR(50) UNIQUE,
             avatar_url TEXT,
             bio TEXT,
@@ -384,7 +384,7 @@ export class Database {
   }
 
   public async createUser(user: User): Promise<User> {
-    const fullName = user.fullName || `${user.ism || ''} ${user.familiya || ''}`.trim() || 'Barbero Foydalanuvchi';
+    const fullName = user.fullName || `${user.ism || ''} ${user.familiya || ''}`.trim() || 'BarberPlan Foydalanuvchi';
     let finalUsername = user.username || `user_${user.phone.slice(-4)}`;
     try {
       const taken = await this.query('SELECT id FROM users WHERE username = $1 AND id != $2 LIMIT 1', [finalUsername, user.id]);

@@ -215,7 +215,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
 
       // If in register mode or profile needs to be saved:
       const nameToSave = ism.trim() || res?.user?.ism || 'Foydalanuvchi';
-      const surNameToSave = familiya.trim() || res?.user?.familiya || 'Barbero';
+      const surNameToSave = familiya.trim() || res?.user?.familiya || 'BarberPlan';
 
       await api.registerProfile(
         nameToSave,
@@ -301,7 +301,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
 
   // Create New Salon
   const handleCreateSalon = async () => {
-    const name = newSalonName.trim() || `${ism || 'Barbero'} Sartaroshxonasi`;
+    const name = newSalonName.trim() || `${ism || 'BarberPlan'} Sartaroshxonasi`;
     setLoading(true);
     try {
       await api.createSalon({

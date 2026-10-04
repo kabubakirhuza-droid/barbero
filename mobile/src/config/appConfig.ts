@@ -1,4 +1,4 @@
-export const APP_NAME = 'Barbero';
+export const APP_NAME = 'BarberPlan';
 
 // Real URL where the app is running (no fake domains)
 export const getAppBaseUrl = (): string => {

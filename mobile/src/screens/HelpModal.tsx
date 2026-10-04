@@ -40,12 +40,12 @@ export const HelpModal: React.FC<HelpModalProps> = ({ visible, onClose }) => {
     language === 'uz'
       ? [
           {
-            q: 'Barbero ilovasiga yangi mijozni qanday qo‘shish mumkin?',
+            q: 'BarberPlan ilovasiga yangi mijozni qanday qo‘shish mumkin?',
             a: '«Jadval» bo‘limida kerakli vaqt katagidagi «+ Bo‘sh vaqt» tugmasini bosing yoki o‘sha vaqtga bir marta bosish orqali tezkor yozuv yarating. So‘ng mijoz ismi va xizmatni tahrirlashingiz mumkin.',
           },
           {
-            q: 'Barbero ilovasidan foydalanish bepulmi?',
-            a: 'Ha, hozirda Barbero ilovasining barcha imkoniyatlari ustalarga mutlaqo bepul taqdim etiladi.',
+            q: 'BarberPlan ilovasidan foydalanish bepulmi?',
+            a: 'Ha, hozirda BarberPlan ilovasining barcha imkoniyatlari ustalarga mutlaqo bepul taqdim etiladi.',
           },
           {
             q: 'Mijozlar uchun shaxsiy havola qanday ishlaydi?',
@@ -62,12 +62,12 @@ export const HelpModal: React.FC<HelpModalProps> = ({ visible, onClose }) => {
         ]
       : [
           {
-            q: 'Как добавить нового клиента в приложение Barbero?',
+            q: 'Как добавить нового клиента в приложение BarberPlan?',
             a: 'В разделе «Расписание» нажмите на нужный слот времени для быстрой записи в один клик. Затем вы можете отредактировать имя клиента и услугу.',
           },
           {
-            q: 'Приложение Barbero бесплатное?',
-            a: 'Да, в настоящее время все функции приложения Barbero абсолютно бесплатны для мастеров.',
+            q: 'Приложение BarberPlan бесплатное?',
+            a: 'Да, в настоящее время все функции приложения BarberPlan абсолютно бесплатны для мастеров.',
           },
           {
             q: 'Как работает персональная ссылка для записи?',
