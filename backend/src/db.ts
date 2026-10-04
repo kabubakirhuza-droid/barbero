@@ -141,6 +141,15 @@ export interface PushSubscriptionItem {
   createdAt?: string;
 }
 
+export interface Review {
+  id: string;
+  masterId: string;
+  clientName: string;
+  rating: number;
+  comment?: string;
+  createdAt?: string;
+}
+
 // PostgreSQL Connection Pool Setup
 const poolConfig: PoolConfig = {
   connectionString: config.databaseUrl || 'postgresql://postgres:postgres@localhost:5432/barbero_db',
@@ -1184,6 +1193,68 @@ export class Database {
       createdAt: r.created_at ? new Date(r.created_at).toISOString() : undefined,
     }));
   }
+
+  public async getInactiveClients(userId: string, daysThreshold: number = 21): Promise<any[]> {
+    const query = `
+      SELECT 
+        c.*,
+        MAX(a.appointment_date) as last_visit_date,
+        COUNT(a.id) as total_appointments
+      FROM clients c
+      LEFT JOIN appointments a ON a.client_id = c.id AND a.user_id = c.user_id AND a.status != 'cancelled'
+      WHERE c.user_id = $1
+      GROUP BY c.id
+      HAVING MAX(a.appointment_date) IS NULL OR MAX(a.appointment_date) < (CURRENT_DATE - INTERVAL '21 days')::text
+      ORDER BY last_visit_date ASC NULLS FIRST
+    `;
+    const res = await this.query(query, [userId]);
+    return res.rows.map((row: any) => ({
+      ...this.mapClient(row),
+      lastVisitDate: row.last_visit_date || null,
+      totalAppointments: Number(row.total_appointments || 0),
+    }));
+  }
+
+  // --- Reviews (Ratings & Feedback) ---
+  public async getReviewsByMasterId(masterId: string): Promise<{ reviews: Review[]; avgRating: number; count: number }> {
+    const res = await this.query(
+      'SELECT * FROM reviews WHERE master_id = $1 ORDER BY created_at DESC',
+      [masterId]
+    );
+    const reviews = res.rows.map((r: any) => this.mapReview(r));
+    const count = reviews.length;
+    const avgRating = count > 0 ? Number((reviews.reduce((s: number, r: Review) => s + r.rating, 0) / count).toFixed(1)) : 5.0;
+    return { reviews, avgRating, count };
+  }
+
+  public async createReview(review: Review): Promise<Review> {
+    const id = review.id || `rev-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    const res = await this.query(
+      `INSERT INTO reviews (id, master_id, client_name, rating, comment, created_at)
+       VALUES ($1, $2, $3, $4, $5, NOW())
+       RETURNING *`,
+      [
+        id,
+        review.masterId,
+        review.clientName,
+        Math.max(1, Math.min(5, Number(review.rating) || 5)),
+        review.comment || null,
+      ]
+    );
+    return this.mapReview(res.rows[0]);
+  }
+
+  private mapReview(row: any): Review {
+    return {
+      id: row.id,
+      masterId: row.master_id,
+      clientName: row.client_name,
+      rating: Number(row.rating || 5),
+      comment: row.comment || undefined,
+      createdAt: row.created_at ? new Date(row.created_at).toISOString() : undefined,
+    };
+  }
 }
 
 export const db = new Database();
+

@@ -28,6 +28,9 @@ import {
   HelpCircle,
   FileCheck,
   LogOut,
+  Star,
+  UserCheck,
+  RotateCcw,
 } from 'lucide-react-native';
 import { colors, COLOR_PRIMARY } from '../theme/theme';
 import { useTranslation } from '../i18n/LanguageContext';
@@ -41,6 +44,8 @@ import { SecurityScreen } from './SecurityScreen';
 import { MySalonScreen } from './MySalonScreen';
 import { BookingRequestsScreen } from './BookingRequestsScreen';
 import { PublicBookingPreviewModal } from './PublicBookingPreviewModal';
+import { ReviewsListModal } from '../components/ReviewsListModal';
+import { InactiveClientsModal } from '../components/InactiveClientsModal';
 import { HelpModal } from './HelpModal';
 import { LegalDocsModal } from './LegalDocsModal';
 import { APP_NAME, APP_BASE_URL } from '../config/appConfig';
@@ -66,10 +71,13 @@ export const ProfilScreen: React.FC<ProfilScreenProps> = ({ onLogout, onOpenAddS
   const { themeMode, setThemeMode } = useTheme();
   const [activeSubScreen, setActiveSubScreen] = useState<SubScreen>(null);
   const [isClientPreviewVisible, setIsClientPreviewVisible] = useState(false);
+  const [isReviewsModalVisible, setIsReviewsModalVisible] = useState(false);
+  const [isInactiveModalVisible, setIsInactiveModalVisible] = useState(false);
   const [isHelpVisible, setIsHelpVisible] = useState(false);
   const [isLegalDocsVisible, setIsLegalDocsVisible] = useState(false);
   const [isAppearanceSheetVisible, setIsAppearanceSheetVisible] = useState(false);
-  const [userData, setUserData] = useState<{ ism: string; familiya: string; phone: string }>({
+  const [reviewsRating, setReviewsRating] = useState({ rating: 4.9, count: 12 });
+  const [userData, setUserData] = useState<{ id?: string; ism: string; familiya: string; phone: string }>({
     ism: 'Abubakir',
     familiya: 'Aliyev',
     phone: '+998 90 033 51 02',
@@ -292,6 +300,57 @@ export const ProfilScreen: React.FC<ProfilScreenProps> = ({ onLogout, onOpenAddS
 
             <View style={styles.menuDivider} />
 
+            {/* 4. Mijozlar bahosi va sharhlari */}
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => setIsReviewsModalVisible(true)}
+              activeOpacity={0.7}
+            >
+              <View style={styles.menuItemLeft}>
+                <View style={[styles.menuIconWrap, { backgroundColor: '#FEF3C7' }]}>
+                  <Star size={20} color="#D97706" fill="#F59E0B" />
+                </View>
+                <View style={{ gap: 2 }}>
+                  <Text style={styles.menuItemLabel}>Mijozlar bahosi va sharhlari</Text>
+                  <Text style={{ fontSize: 11, color: colors.textMuted }}>
+                    O'rtacha {reviewsRating.rating} ⭐ ({reviewsRating.count} ta fikr)
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.ratingBadgePill}>
+                <Star size={12} color="#D97706" fill="#F59E0B" />
+                <Text style={styles.ratingBadgeText}>{reviewsRating.rating}</Text>
+                <ChevronRight size={16} color={colors.textMuted} />
+              </View>
+            </TouchableOpacity>
+
+            <View style={styles.menuDivider} />
+
+            {/* 5. Nofaol mijozlarni qaytarish */}
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => setIsInactiveModalVisible(true)}
+              activeOpacity={0.7}
+            >
+              <View style={styles.menuItemLeft}>
+                <View style={[styles.menuIconWrap, { backgroundColor: '#EDE9FE' }]}>
+                  <RotateCcw size={20} color="#7C3AED" />
+                </View>
+                <View style={{ gap: 2 }}>
+                  <Text style={styles.menuItemLabel}>Mijozlarni qaytarish (Retention)</Text>
+                  <Text style={{ fontSize: 11, color: colors.textMuted }}>
+                    3+ hafta kelmagan mijozlarga eslatma
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.retentionBadge}>
+                <Text style={styles.retentionBadgeText}>Smart</Text>
+                <ChevronRight size={16} color={colors.textMuted} />
+              </View>
+            </TouchableOpacity>
+
+            <View style={styles.menuDivider} />
+
             {/* Video darsliklar (Tez kunda) */}
             <View style={styles.menuItem}>
               <View style={styles.menuItemLeft}>
@@ -424,6 +483,20 @@ export const ProfilScreen: React.FC<ProfilScreenProps> = ({ onLogout, onOpenAddS
       <PublicBookingPreviewModal
         visible={isClientPreviewVisible}
         onClose={() => setIsClientPreviewVisible(false)}
+      />
+
+      {/* 4. Reviews & Ratings Modal */}
+      <ReviewsListModal
+        visible={isReviewsModalVisible}
+        onClose={() => setIsReviewsModalVisible(false)}
+        masterId={userData.id || 'me'}
+        masterName={fullName}
+      />
+
+      {/* 5. Inactive Clients Retention Modal */}
+      <InactiveClientsModal
+        visible={isInactiveModalVisible}
+        onClose={() => setIsInactiveModalVisible(false)}
       />
 
       {/* Help / Support modal */}
@@ -711,4 +784,33 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginTop: 2,
   },
+  ratingBadgePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  ratingBadgeText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#D97706',
+  },
+  retentionBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#EDE9FE',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  retentionBadgeText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#7C3AED',
+  },
 });
+

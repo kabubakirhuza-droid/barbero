@@ -163,3 +163,13 @@ CREATE TABLE IF NOT EXISTS push_subscriptions (
   device VARCHAR(150),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+-- 13. Reviews table (Master Ratings & Feedback)
+CREATE TABLE IF NOT EXISTS reviews (
+  id VARCHAR(64) PRIMARY KEY,
+  master_id VARCHAR(64) REFERENCES users(id) ON DELETE CASCADE,
+  client_name VARCHAR(100) NOT NULL,
+  rating INTEGER NOT NULL DEFAULT 5, -- 1 to 5 stars
+  comment TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);

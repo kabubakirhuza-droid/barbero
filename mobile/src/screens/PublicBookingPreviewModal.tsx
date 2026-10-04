@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Modal,
   View,
@@ -10,13 +10,14 @@ import {
   Platform,
   Alert,
 } from 'react-native';
-import { X, Check, Clock, ShieldCheck, MapPin, Phone, User as UserIcon } from 'lucide-react-native';
+import { X, Check, Clock, ShieldCheck, MapPin, Phone, User as UserIcon, Star } from 'lucide-react-native';
 import { colors, COLOR_PRIMARY } from '../theme/theme';
 import { Button } from '../components/Button';
 import { BarberoLogo } from '../components/BarberoLogo';
 import { api } from '../api/apiClient';
 import { APP_BASE_URL } from '../config/appConfig';
 import { showAlert } from '../utils/alerts';
+import { ReviewsListModal } from '../components/ReviewsListModal';
 
 interface PublicBookingPreviewModalProps {
   visible: boolean;
@@ -38,6 +39,21 @@ export const PublicBookingPreviewModal: React.FC<PublicBookingPreviewModalProps>
   const [selectedDateIndex, setSelectedDateIndex] = useState(0);
   const [selectedTime, setSelectedTime] = useState('15:00');
   const [clientName, setClientName] = useState('');
+  const [isReviewsModalOpen, setIsReviewsModalOpen] = useState(false);
+  const [ratingStats, setRatingStats] = useState({ rating: 4.9, count: 18 });
+
+  useEffect(() => {
+    if (visible && masterUsername) {
+      api.getReviews(masterUsername).then(res => {
+        if (res?.summary) {
+          setRatingStats({
+            rating: res.summary.averageRating || 4.9,
+            count: res.summary.totalReviews || 18,
+          });
+        }
+      }).catch(() => {});
+    }
+  }, [visible, masterUsername]);
   const [rawPhone, setRawPhone] = useState('901234567');
   const [isSuccess, setIsSuccess] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -261,6 +277,16 @@ export const PublicBookingPreviewModal: React.FC<PublicBookingPreviewModalProps>
                 <View style={styles.locationRow}>
                   <MapPin size={13} color={colors.textSecondary} />
                   <Text style={styles.locationText}>Toshkent sh., Chilonzor</Text>
+                  <TouchableOpacity
+                    style={styles.ratingBadgeBtn}
+                    onPress={() => setIsReviewsModalOpen(true)}
+                    activeOpacity={0.7}
+                  >
+                    <Star size={12} color="#D97706" fill="#F59E0B" />
+                    <Text style={styles.ratingBadgeText}>
+                      {ratingStats.rating} ({ratingStats.count} sharh)
+                    </Text>
+                  </TouchableOpacity>
                 </View>
               </View>
             </View>
@@ -408,6 +434,14 @@ export const PublicBookingPreviewModal: React.FC<PublicBookingPreviewModalProps>
             />
           </ScrollView>
         )}
+
+        {/* Reviews and Ratings Modal for online client booking */}
+        <ReviewsListModal
+          visible={isReviewsModalOpen}
+          onClose={() => setIsReviewsModalOpen(false)}
+          masterId={masterUsername}
+          masterName="Bobur Aliyev"
+        />
       </View>
     </Modal>
   );
@@ -509,12 +543,29 @@ const styles = StyleSheet.create({
   locationRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    marginTop: 2,
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 3,
   },
   locationText: {
     fontSize: 12,
     color: colors.textMuted,
+  },
+  ratingBadgeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+  },
+  ratingBadgeText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#D97706',
   },
   scheduleInfoPill: {
     flexDirection: 'row',

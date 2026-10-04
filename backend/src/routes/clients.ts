@@ -18,6 +18,18 @@ router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
   }
 });
 
+// GET /clients/inactive - Smart customer retention list (>21 days since last visit)
+router.get('/inactive', async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.user!.userId;
+    const inactiveClients = await db.getInactiveClients(userId, 21);
+    res.json({ inactiveClients, count: inactiveClients.length });
+  } catch (error) {
+    console.error('[Clients GET inactive error]:', error);
+    res.status(500).json({ error: 'Nofaol mijozlarni yuklashda xatolik yuz berdi' });
+  }
+});
+
 // GET /clients/:id
 router.get('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
   try {

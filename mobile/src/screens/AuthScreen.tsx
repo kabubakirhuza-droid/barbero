@@ -793,6 +793,17 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                 disabled={!selectedSalonId}
               />
             )}
+
+            {/* Frictionless Solo Barber option */}
+            <TouchableOpacity
+              style={styles.skipSoloBtn}
+              onPress={() => onSuccess()}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.skipSoloText}>
+                ✂️ Mustaqil usta (Salonsiz to'g'ridan-to'g'ri boshlash) →
+              </Text>
+            </TouchableOpacity>
           </View>
         </View>
       )}
@@ -1145,4 +1156,17 @@ const styles = StyleSheet.create({
     gap: 6,
     marginTop: 4,
   },
+  skipSoloBtn: {
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 6,
+  },
+  skipSoloText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.textSecondary,
+    textAlign: 'center',
+  },
 });
+

@@ -237,6 +237,10 @@ class ApiClient {
     return this.request('/clients');
   }
 
+  async getInactiveClients(): Promise<{ inactiveClients: any[]; count: number }> {
+    return this.request('/clients/inactive');
+  }
+
   async getClient(id: string): Promise<{ client: any; appointments: Appointment[] }> {
     return this.request(`/clients/${id}`);
   }
@@ -251,6 +255,23 @@ class ApiClient {
   async deleteClient(id: string): Promise<{ success: boolean }> {
     return this.request(`/clients/${id}`, {
       method: 'DELETE',
+    });
+  }
+
+  // --- Reviews (Ratings & Feedback) ---
+  async getReviews(masterId: string): Promise<{ reviews: any[]; avgRating: number; count: number }> {
+    return this.request(`/reviews/${masterId}`);
+  }
+
+  async submitReview(
+    masterId: string,
+    clientName: string,
+    rating: number,
+    comment?: string
+  ): Promise<{ success: boolean; review: any }> {
+    return this.request(`/reviews/${masterId}`, {
+      method: 'POST',
+      body: JSON.stringify({ clientName, rating, comment }),
     });
   }
 

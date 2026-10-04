@@ -12,6 +12,7 @@ import publicBookingRoutes from './routes/publicBooking';
 import salonRoutes from './routes/salons';
 import bookingRequestRoutes from './routes/bookingRequests';
 import pushRoutes from './routes/push';
+import reviewRoutes from './routes/reviews';
 
 const app = express();
 
@@ -31,6 +32,7 @@ const routes = [
   { path: '/salons', handler: salonRoutes },
   { path: '/booking-requests', handler: bookingRequestRoutes },
   { path: '/push', handler: pushRoutes },
+  { path: '/reviews', handler: reviewRoutes },
 ];
 
 routes.forEach(({ path, handler }) => {
