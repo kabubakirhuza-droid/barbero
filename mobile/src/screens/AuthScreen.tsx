@@ -28,6 +28,7 @@ import { BarberoLogo } from '../components/BarberoLogo';
 import { api } from '../api/apiClient';
 import { SALON_MERGE_RADIUS_M } from '../config/appConfig';
 import { Salon, UserRole } from '../types';
+import { SalonLocationMapPicker } from '../components/SalonLocationMapPicker';
 
 interface AuthScreenProps {
   onSuccess: () => void;
@@ -760,6 +761,20 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                   </View>
                 </View>
               )}
+
+              {/* Interactive Location Map Picker */}
+              <SalonLocationMapPicker
+                coords={coords}
+                address={newSalonAddress}
+                salonName={newSalonName || `${ism || 'Barbero'} Sartaroshxonasi`}
+                onCoordsChange={(newCoords, addrHint) => {
+                  setCoords(newCoords);
+                  if (addrHint) {
+                    setNewSalonAddress(addrHint);
+                  }
+                }}
+                height={200}
+              />
             </ScrollView>
           )}
 
