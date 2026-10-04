@@ -7,7 +7,6 @@ import {
   TouchableOpacity,
   Switch,
   Platform,
-  Alert,
 } from 'react-native';
 import {
   ChevronLeft,
@@ -24,6 +23,7 @@ import { colors, COLOR_PRIMARY } from '../theme/theme';
 import { useTranslation } from '../i18n/LanguageContext';
 import { Button } from '../components/Button';
 import { APP_BASE_URL } from '../config/appConfig';
+import { showToast } from '../utils/alerts';
 
 interface BookingLinkScreenProps {
   onBack: () => void;
@@ -52,7 +52,7 @@ export const BookingLinkScreen: React.FC<BookingLinkScreenProps> = ({
     }
     setCopied(true);
     setTimeout(() => setCopied(false), 2500);
-    Alert.alert("Nusxalandi!", bookingUrl);
+    showToast("Havola nusxalandi!", 'success');
   };
 
   const handleShare = async () => {

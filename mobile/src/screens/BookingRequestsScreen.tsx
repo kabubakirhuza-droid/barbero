@@ -6,12 +6,12 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
 } from 'react-native';
 import { ArrowLeft, CalendarCheck, Check, X, Phone, Clock, User, Sparkles } from 'lucide-react-native';
 import { colors, COLOR_PRIMARY } from '../theme/theme';
 import { api } from '../api/apiClient';
 import { BookingRequest } from '../types';
+import { showToast, confirmAction } from '../utils/alerts';
 
 interface BookingRequestsScreenProps {
   onBack: () => void;
@@ -46,43 +46,40 @@ export const BookingRequestsScreen: React.FC<BookingRequestsScreenProps> = ({
     try {
       setActionLoadingId(req.id);
       await api.acceptBookingRequest(req.id);
-      Alert.alert(
-        "Qabul qilindi! 🎉",
-        `${req.clientName} uchun ${req.time} da "${req.serviceName}" jadvalingizga qo'shildi.`
+      showToast(
+        `Qabul qilindi! ${req.clientName} uchun ${req.time} da "${req.serviceName}" jadvalga qo'shildi.`,
+        'success'
       );
       setRequests((prev) => prev.filter((r) => r.id !== req.id));
       if (onRequestAccepted) {
         onRequestAccepted();
       }
     } catch (e: any) {
-      Alert.alert('Xatolik', e.message || "So'rovni qabul qilib bo'lmadi");
+      showToast(e.message || "So'rovni qabul qilib bo'lmadi", 'error');
     } finally {
       setActionLoadingId(null);
     }
   };
 
   const handleReject = async (req: BookingRequest) => {
-    Alert.alert(
+    confirmAction(
       "So'rovni rad etish",
       `${req.clientName} ning so'rovini rad etmoqchimisiz?`,
-      [
-        { text: 'Bekor qilish', style: 'cancel' },
-        {
-          text: 'Rad etish',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              setActionLoadingId(req.id);
-              await api.rejectBookingRequest(req.id);
-              setRequests((prev) => prev.filter((r) => r.id !== req.id));
-            } catch (e: any) {
-              Alert.alert('Xatolik', e.message || "So'rovni rad etib bo'lmadi");
-            } finally {
-              setActionLoadingId(null);
-            }
-          },
-        },
-      ]
+      async () => {
+        try {
+          setActionLoadingId(req.id);
+          await api.rejectBookingRequest(req.id);
+          showToast("So'rov rad etildi", 'info');
+          setRequests((prev) => prev.filter((r) => r.id !== req.id));
+        } catch (e: any) {
+          showToast(e.message || "So'rovni rad etib bo'lmadi", 'error');
+        } finally {
+          setActionLoadingId(null);
+        }
+      },
+      'Rad etish',
+      'Bekor qilish',
+      true
     );
   };
 

@@ -10,9 +10,12 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors } from './src/theme/colors';
+import { ThemeProvider, useTheme } from './src/theme/ThemeContext';
+import { ModalToastProvider } from './src/context/ModalToastContext';
 import { LanguageProvider, useTranslation } from './src/i18n/LanguageContext';
 import { Header } from './src/components/Header';
 import { FloatingTabBar, TabKey } from './src/components/FloatingTabBar';
+import { AnimatedSplashScreen } from './src/components/AnimatedSplashScreen';
 import { OnboardingScreen } from './src/screens/OnboardingScreen';
 import { RoleSelectionScreen } from './src/screens/RoleSelectionScreen';
 import { AuthScreen } from './src/screens/AuthScreen';
@@ -32,8 +35,10 @@ const ROLE_KEY = 'app_user_role';
 
 function MainApp() {
   const { t } = useTranslation();
+  const { colors: currentColors, isDark } = useTheme();
 
   // App navigation state
+  const [isSplashDone, setIsSplashDone] = useState(false);
   const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState<boolean | null>(null);
   const [selectedRole, setSelectedRole] = useState<UserRole | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
@@ -114,11 +119,27 @@ function MainApp() {
     setActiveTab('jadval');
   };
 
+  // --- Splash Screen (<= 2 seconds animated brand splash) ---
+  if (!isSplashDone) {
+    return (
+      <SafeAreaView style={[styles.safeContainer, { backgroundColor: currentColors.background }]}>
+        <StatusBar
+          barStyle={isDark ? 'light-content' : 'dark-content'}
+          backgroundColor={currentColors.background}
+        />
+        <AnimatedSplashScreen onFinish={() => setIsSplashDone(true)} />
+      </SafeAreaView>
+    );
+  }
+
   // --- Route 0: Public Booking Page (no auth required) ---
   if (isPublicBookingRoute) {
     return (
-      <SafeAreaView style={styles.safeContainer}>
-        <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
+      <SafeAreaView style={[styles.safeContainer, { backgroundColor: currentColors.background }]}>
+        <StatusBar
+          barStyle={isDark ? 'light-content' : 'dark-content'}
+          backgroundColor={currentColors.background}
+        />
         <PublicBookingPreviewModal
           visible={true}
           onClose={() => {
@@ -134,8 +155,11 @@ function MainApp() {
   // --- Route 1: Onboarding (3 slides) ---
   if (hasCompletedOnboarding === false) {
     return (
-      <SafeAreaView style={styles.safeContainer}>
-        <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
+      <SafeAreaView style={[styles.safeContainer, { backgroundColor: currentColors.background }]}>
+        <StatusBar
+          barStyle={isDark ? 'light-content' : 'dark-content'}
+          backgroundColor={currentColors.background}
+        />
         <OnboardingScreen onFinish={handleFinishOnboarding} />
       </SafeAreaView>
     );
@@ -144,8 +168,11 @@ function MainApp() {
   // --- Route 2: Role Selection (new users who haven't authed yet) ---
   if (isAuthenticated === false && !selectedRole) {
     return (
-      <SafeAreaView style={styles.safeContainer}>
-        <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
+      <SafeAreaView style={[styles.safeContainer, { backgroundColor: currentColors.background }]}>
+        <StatusBar
+          barStyle={isDark ? 'light-content' : 'dark-content'}
+          backgroundColor={currentColors.background}
+        />
         <RoleSelectionScreen onRoleSelected={handleRoleSelected} />
       </SafeAreaView>
     );
@@ -154,8 +181,11 @@ function MainApp() {
   // --- Route 3: Auth (Phone → Code → Profile → [Location if MASTER]) ---
   if (isAuthenticated === false && selectedRole) {
     return (
-      <SafeAreaView style={styles.safeContainer}>
-        <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
+      <SafeAreaView style={[styles.safeContainer, { backgroundColor: currentColors.background }]}>
+        <StatusBar
+          barStyle={isDark ? 'light-content' : 'dark-content'}
+          backgroundColor={currentColors.background}
+        />
         <AuthScreen
           onSuccess={handleAuthSuccess}
           role={selectedRole}
@@ -168,8 +198,11 @@ function MainApp() {
   // --- Route 4a: CLIENT Dashboard ---
   if (isAuthenticated && userRole === 'CLIENT') {
     return (
-      <SafeAreaView style={styles.safeContainer}>
-        <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
+      <SafeAreaView style={[styles.safeContainer, { backgroundColor: currentColors.background }]}>
+        <StatusBar
+          barStyle={isDark ? 'light-content' : 'dark-content'}
+          backgroundColor={currentColors.background}
+        />
         <ClientHomeScreen onLogout={handleLogout} />
       </SafeAreaView>
     );
@@ -177,8 +210,11 @@ function MainApp() {
 
   // --- Route 4b: MASTER Dashboard (4-tab layout) ---
   return (
-    <SafeAreaView style={styles.safeContainer}>
-      <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
+    <SafeAreaView style={[styles.safeContainer, { backgroundColor: currentColors.background }]}>
+      <StatusBar
+        barStyle={isDark ? 'light-content' : 'dark-content'}
+        backgroundColor={currentColors.background}
+      />
 
       {/* Top Header */}
       <Header
@@ -187,7 +223,7 @@ function MainApp() {
       />
 
       {/* Main Tab Screen Content */}
-      <View style={styles.contentArea}>
+      <View style={[styles.contentArea, { backgroundColor: currentColors.background }]}>
         {activeTab === 'jadval' && (
           <JadvalScreen onAddServicePress={() => setIsAddServiceModalVisible(true)} />
         )}
@@ -234,20 +270,22 @@ function MainApp() {
 
 export default function App() {
   return (
-    <LanguageProvider>
-      <MainApp />
-    </LanguageProvider>
+    <ThemeProvider>
+      <LanguageProvider>
+        <ModalToastProvider>
+          <MainApp />
+        </ModalToastProvider>
+      </LanguageProvider>
+    </ThemeProvider>
   );
 }
 
 const styles = StyleSheet.create({
   safeContainer: {
     flex: 1,
-    backgroundColor: colors.background,
     paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
   },
   contentArea: {
     flex: 1,
-    backgroundColor: colors.background,
   },
 });

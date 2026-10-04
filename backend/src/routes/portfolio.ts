@@ -1,15 +1,19 @@
-import { Router, Request, Response } from 'express';
+import { Router, Response } from 'express';
 import { db, PortfolioPhoto } from '../db';
+import { optionalAuth, authenticateToken, AuthRequest } from '../middleware/auth';
 
 const router = Router();
 
 // GET /portfolio
-router.get('/', (req: Request, res: Response) => {
-  res.json({ photos: db.portfolio });
+router.get('/', optionalAuth, (req: AuthRequest, res: Response) => {
+  const targetUserId = (req.query.userId as string) || req.user?.userId || 'u-1';
+  const photos = db.portfolioPhotos.filter((p) => p.userId === targetUserId || p.isPublic);
+  res.json({ photos });
 });
 
-// POST /portfolio
-router.post('/', (req: Request, res: Response): void => {
+// POST /portfolio (Protected)
+router.post('/', authenticateToken, (req: AuthRequest, res: Response): void => {
+  const userId = req.user!.userId;
   const { imageUrl, caption, isPublic } = req.body;
 
   if (!imageUrl) {
@@ -18,22 +22,23 @@ router.post('/', (req: Request, res: Response): void => {
   }
 
   const newPhoto: PortfolioPhoto = {
-    id: `pt-${Date.now()}`,
-    imageUrl,
-    caption: caption || "Yangi soch turmagi qo'shildi",
+    id: `pt-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+    userId,
+    imageUrl: String(imageUrl).trim(),
+    caption: caption ? String(caption).trim() : "Yangi turmak qo'shildi",
     likesCount: 0,
     isPublic: isPublic !== undefined ? Boolean(isPublic) : true,
     createdAt: new Date().toISOString(),
   };
 
-  db.portfolio.unshift(newPhoto);
+  db.portfolioPhotos.unshift(newPhoto);
   res.status(201).json({ success: true, photo: newPhoto });
 });
 
 // POST /portfolio/:id/like
-router.post('/:id/like', (req: Request, res: Response): void => {
+router.post('/:id/like', (req: AuthRequest, res: Response): void => {
   const { id } = req.params;
-  const photo = db.portfolio.find((p) => p.id === id);
+  const photo = db.portfolioPhotos.find((p) => p.id === id);
   if (!photo) {
     res.status(404).json({ error: 'Rasm topilmadi' });
     return;
@@ -42,14 +47,15 @@ router.post('/:id/like', (req: Request, res: Response): void => {
   res.json({ success: true, likesCount: photo.likesCount });
 });
 
-// DELETE /portfolio/:id
-router.delete('/:id', (req: Request, res: Response): void => {
+// DELETE /portfolio/:id (Protected)
+router.delete('/:id', authenticateToken, (req: AuthRequest, res: Response): void => {
+  const userId = req.user!.userId;
   const { id } = req.params;
-  const initialLen = db.portfolio.length;
-  db.portfolio = db.portfolio.filter((p) => p.id !== id);
+  const initialLen = db.portfolioPhotos.length;
+  db.portfolioPhotos = db.portfolioPhotos.filter((p) => !(p.id === id && p.userId === userId));
 
-  if (db.portfolio.length === initialLen) {
-    res.status(404).json({ error: 'Rasm topilmadi' });
+  if (db.portfolioPhotos.length === initialLen) {
+    res.status(404).json({ error: 'Rasm topilmadi yoki ruxsat berilmagan' });
     return;
   }
 

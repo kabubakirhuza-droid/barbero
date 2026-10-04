@@ -5,16 +5,27 @@ dotenv.config();
 export const APP_NAME = process.env.APP_NAME || 'Barbero';
 export const APP_BASE_URL = process.env.APP_BASE_URL || 'http://localhost:8081';
 
+const isProduction = process.env.NODE_ENV === 'production' || process.env.VERCEL === '1';
+
+// Validate required environment variables in production
+const jwtSecret = process.env.JWT_SECRET || (isProduction ? '' : 'dev_jwt_secret_change_in_production_key');
+const jwtRefreshSecret = process.env.JWT_REFRESH_SECRET || (isProduction ? '' : 'dev_refresh_jwt_secret_change_in_production');
+const telegramGatewayToken = process.env.TELEGRAM_GATEWAY_TOKEN || '';
+
+if (isProduction && (!jwtSecret || !jwtRefreshSecret)) {
+  console.error('FATAL: JWT_SECRET and JWT_REFRESH_SECRET must be set in environment variables.');
+}
+
 export const config = {
   appName: APP_NAME,
   appBaseUrl: APP_BASE_URL,
   port: parseInt(process.env.PORT || '5000', 10),
-  jwtSecret: process.env.JWT_SECRET || 'barbero_super_jwt_secret_key_2026',
-  jwtRefreshSecret: process.env.JWT_REFRESH_SECRET || 'barbero_refresh_jwt_key_2026',
-  telegramGatewayToken: process.env.TELEGRAM_GATEWAY_TOKEN || 'AAH_TwAA7jCfQBYKEhI1DNY_THRPV5YKQXkgYvcrQzbyVw',
+  jwtSecret: jwtSecret || 'dev_jwt_secret_change_in_production_key',
+  jwtRefreshSecret: jwtRefreshSecret || 'dev_refresh_jwt_secret_change_in_production',
+  telegramGatewayToken,
   demoAuth: process.env.DEMO_AUTH === 'true',
   salonMergeRadiusM: parseInt(process.env.SALON_MERGE_RADIUS_M || '50', 10), // 50 meters
-  databaseUrl: process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/barbero_db',
+  databaseUrl: process.env.DATABASE_URL || '',
   rateLimitSeconds: 60,
   maxVerificationAttempts: 5,
 };

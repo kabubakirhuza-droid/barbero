@@ -1,23 +1,30 @@
 import { Router, Request, Response } from 'express';
-import { db, Appointment, Client } from '../db';
+import { db, Appointment } from '../db';
 
 const router = Router();
 
 // GET /public/b/:username - Info for public booking page
 router.get('/b/:username', (req: Request, res: Response): void => {
   const { username } = req.params;
-  const user = db.users.find((u) => u.username.toLowerCase() === username.toLowerCase()) || db.users[0];
+  const master = db.getUserByUsername(username) || db.getUserById(username);
 
-  const activeServices = db.services.filter((s) => s.isActive);
-  const workingSchedule = db.workingHours;
-  const photos = db.portfolio.filter((p) => p.isPublic);
+  if (!master) {
+    res.status(404).json({ error: 'Usta topilmadi' });
+    return;
+  }
+
+  const activeServices = db.getServices(master.id).filter((s) => s.isActive);
+  const workingSchedule = db.getWorkingHours(master.id);
+  const photos = db.portfolioPhotos.filter((p) => p.userId === master.id && p.isPublic);
+  const settings = db.getUserSettings(master.id);
 
   res.json({
     master: {
-      name: user.fullName,
-      username: user.username,
-      avatarUrl: user.avatarUrl,
-      bio: user.bio,
+      id: master.id,
+      name: master.fullName,
+      username: master.username,
+      avatarUrl: master.avatarUrl,
+      bio: master.bio,
       workingDays: 'Dush – Shan 09:00 – 21:00',
       bookingWindowDays: 14,
     },
@@ -25,19 +32,27 @@ router.get('/b/:username', (req: Request, res: Response): void => {
     workingHours: workingSchedule,
     portfolio: photos,
     settings: {
-      bookingLinkActive: db.userSettings.bookingLinkActive,
-      allowCustomTimeRequest: db.userSettings.allowCustomTimeRequest,
-      allowLunchTimeBooking: db.userSettings.allowLunchTimeBooking,
+      bookingLinkActive: settings.bookingLinkActive,
+      allowCustomTimeRequest: settings.allowCustomTimeRequest,
+      allowLunchTimeBooking: settings.allowLunchTimeBooking,
     },
   });
 });
 
 // GET /public/b/:username/available-slots?date=YYYY-MM-DD
 router.get('/b/:username/available-slots', (req: Request, res: Response): void => {
+  const { username } = req.params;
+  const master = db.getUserByUsername(username) || db.getUserById(username);
+
+  if (!master) {
+    res.status(404).json({ error: 'Usta topilmadi' });
+    return;
+  }
+
   const { date } = req.query;
   const targetDate = (date as string) || new Date().toISOString().split('T')[0];
 
-  // Standard working hours 09:00 - 21:00 with 30 min intervals
+  // Base slots
   const baseSlots = [
     '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
     '12:00', '12:30', '14:00', '14:30', '15:00', '15:30',
@@ -45,10 +60,10 @@ router.get('/b/:username/available-slots', (req: Request, res: Response): void =
     '19:00', '19:30', '20:00', '20:30'
   ];
 
-  // Find occupied slots for this date
+  // Find occupied slots for this date and master
   const occupiedSlots = new Set(
-    db.appointments
-      .filter((a) => a.date === targetDate && a.status !== 'cancelled')
+    db.getAppointments(master.id, targetDate)
+      .filter((a) => a.status !== 'cancelled')
       .map((a) => a.startTime)
   );
 
@@ -63,6 +78,13 @@ router.get('/b/:username/available-slots', (req: Request, res: Response): void =
 // POST /public/b/:username/book - Submit booking from client
 router.post('/b/:username/book', (req: Request, res: Response): void => {
   const { username } = req.params;
+  const master = db.getUserByUsername(username) || db.getUserById(username);
+
+  if (!master) {
+    res.status(404).json({ error: 'Usta topilmadi' });
+    return;
+  }
+
   const { clientName, clientPhone, serviceId, date, startTime } = req.body;
 
   if (!clientName || !clientPhone || !serviceId || !date || !startTime) {
@@ -70,59 +92,45 @@ router.post('/b/:username/book', (req: Request, res: Response): void => {
     return;
   }
 
-  const service = db.services.find((s) => s.id === serviceId) || db.services[0];
-
-  // Check if slot is already occupied
-  const alreadyBooked = db.appointments.some(
-    (a) => a.date === date && a.startTime === startTime && a.status !== 'cancelled'
-  );
-
-  if (alreadyBooked) {
-    res.status(409).json({ error: 'Bu vaqt allaqachon band qilingan' });
+  const service = db.getServiceById(serviceId) || db.getServices(master.id)[0];
+  if (!service) {
+    res.status(400).json({ error: 'Tanlangan xizmat topilmadi' });
     return;
   }
 
-  let client = db.clients.find((c) => c.phone === clientPhone);
-  if (!client) {
-    client = {
-      id: `c-${Date.now()}`,
-      userId: 'u-1',
-      name: clientName,
-      phone: clientPhone,
-      totalSpent: service.price,
-      visitsCount: 1,
-    };
-    db.clients.push(client);
-  } else {
-    client.visitsCount += 1;
-    client.totalSpent += service.price;
+  // Check if slot is already occupied
+  if (db.hasActiveSlotConflict(master.id, date, startTime)) {
+    res.status(409).json({ error: 'Bu vaqt oralig‘i allaqachon band qilingan' });
+    return;
   }
+
+  const client = db.createOrUpdateClient(master.id, String(clientName).trim(), String(clientPhone).trim(), service.price);
 
   // Calculate endTime
   const [h, m] = startTime.split(':').map(Number);
-  const totalM = h * 60 + m + service.duration;
+  const totalM = (h || 0) * 60 + (m || 0) + (service.duration || 30);
   const endTime = `${String(Math.floor(totalM / 60) % 24).padStart(2, '0')}:${String(totalM % 60).padStart(2, '0')}`;
 
   const newAppointment: Appointment = {
-    id: `apt-${Date.now()}`,
-    userId: 'u-1',
+    id: `apt-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+    userId: master.id,
     clientId: client.id,
-    clientName,
-    clientPhone,
+    clientName: String(clientName).trim(),
+    clientPhone: String(clientPhone).trim(),
     serviceId: service.id,
     serviceName: service.name,
     servicePrice: service.price,
-    badgeColor: service.badgeColor,
+    badgeColor: service.badgeColor || '#A67C2E',
     date,
     startTime,
     endTime,
-    duration: service.duration,
+    duration: service.duration || 30,
     status: 'confirmed',
   };
 
-  db.appointments.push(newAppointment);
+  db.createAppointment(newAppointment);
 
-  console.log(`[PublicBooking] New appointment booked by ${clientName} (${clientPhone}) on ${date} at ${startTime}`);
+  console.log(`[PublicBooking] New appointment booked for master ${master.fullName} by ${clientName} on ${date} at ${startTime}`);
 
   res.status(201).json({
     success: true,

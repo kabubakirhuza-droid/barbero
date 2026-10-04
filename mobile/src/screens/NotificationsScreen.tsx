@@ -7,7 +7,6 @@ import {
   TouchableOpacity,
   Switch,
   Platform,
-  Alert,
   ActivityIndicator,
 } from 'react-native';
 import {

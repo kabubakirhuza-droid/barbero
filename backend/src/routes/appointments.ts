@@ -1,16 +1,17 @@
-import { Router, Request, Response } from 'express';
-import { db, Appointment, Client } from '../db';
+import { Router, Response } from 'express';
+import { db, Appointment } from '../db';
+import { authenticateToken, AuthRequest } from '../middleware/auth';
 
 const router = Router();
 
-// GET /appointments?date=YYYY-MM-DD
-router.get('/', (req: Request, res: Response) => {
-  const { date } = req.query;
-  let list = db.appointments;
+// Require auth on all appointment routes
+router.use(authenticateToken);
 
-  if (date) {
-    list = list.filter((a) => a.date === date);
-  }
+// GET /appointments?date=YYYY-MM-DD
+router.get('/', (req: AuthRequest, res: Response) => {
+  const userId = req.user!.userId;
+  const { date } = req.query;
+  const list = db.getAppointments(userId, date as string | undefined);
 
   // Calculate day total
   const dayTotal = list
@@ -25,7 +26,8 @@ router.get('/', (req: Request, res: Response) => {
 });
 
 // POST /appointments/quick - 1-Click Instant Booking on Free Slot
-router.post('/quick', (req: Request, res: Response): void => {
+router.post('/quick', (req: AuthRequest, res: Response): void => {
+  const userId = req.user!.userId;
   const { date, startTime } = req.body;
 
   if (!date || !startTime) {
@@ -33,31 +35,37 @@ router.post('/quick', (req: Request, res: Response): void => {
     return;
   }
 
-  // Sequential Mijoz N number
-  const nextOrderNumber = db.appointments.length + 1;
-  const clientName = `Mijoz ${nextOrderNumber}`;
-  const defaultClientPhone = '';
+  // Check double booking
+  if (db.hasActiveSlotConflict(userId, date, startTime)) {
+    res.status(409).json({ error: "Ushbu vaqt oralig'i allaqachon band qilingan" });
+    return;
+  }
 
-  // Default service: first service in list ("Soch olish", 50 000 uzs, 30 min)
-  const defaultService = db.services[0] || {
-    id: 'srv-1',
+  // Default master service
+  const userServices = db.getServices(userId);
+  const defaultService = userServices[0] || {
+    id: `srv-${userId}-def`,
     name: 'Soch olish',
     price: 50000,
     duration: 30,
     badgeColor: '#A67C2E',
   };
 
+  const nextOrderNumber = db.getAppointments(userId, date).length + 1;
+  const clientName = `Mijoz ${nextOrderNumber}`;
+  const defaultClientPhone = '';
+
   // Calculate end time
   const [hours, minutes] = startTime.split(':').map(Number);
-  const totalMinutes = hours * 60 + minutes + defaultService.duration;
+  const totalMinutes = (hours || 0) * 60 + (minutes || 0) + defaultService.duration;
   const endHours = Math.floor(totalMinutes / 60) % 24;
   const endMins = totalMinutes % 60;
   const endTime = `${String(endHours).padStart(2, '0')}:${String(endMins).padStart(2, '0')}`;
 
   const newAppointment: Appointment = {
-    id: `apt-${Date.now()}`,
-    userId: 'u-1',
-    clientId: `c-${Date.now()}`,
+    id: `apt-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+    userId,
+    clientId: undefined,
     clientName,
     clientPhone: defaultClientPhone,
     serviceId: defaultService.id,
@@ -71,7 +79,7 @@ router.post('/quick', (req: Request, res: Response): void => {
     status: 'confirmed',
   };
 
-  db.appointments.push(newAppointment);
+  db.createAppointment(newAppointment);
 
   res.status(201).json({
     success: true,
@@ -81,7 +89,8 @@ router.post('/quick', (req: Request, res: Response): void => {
 });
 
 // POST /appointments - Standard creation
-router.post('/', (req: Request, res: Response): void => {
+router.post('/', (req: AuthRequest, res: Response): void => {
+  const userId = req.user!.userId;
   const {
     clientName,
     clientPhone,
@@ -99,21 +108,36 @@ router.post('/', (req: Request, res: Response): void => {
     return;
   }
 
+  // Check double booking conflict
+  if (db.hasActiveSlotConflict(userId, date, startTime)) {
+    res.status(409).json({ error: "Ushbu vaqt oralig'i allaqachon band qilingan" });
+    return;
+  }
+
   const [hours, minutes] = startTime.split(':').map(Number);
-  const totalMinutes = hours * 60 + minutes + Number(duration);
+  const totalMinutes = (hours || 0) * 60 + (minutes || 0) + Number(duration);
   const endHours = Math.floor(totalMinutes / 60) % 24;
   const endMins = totalMinutes % 60;
   const endTime = `${String(endHours).padStart(2, '0')}:${String(endMins).padStart(2, '0')}`;
 
+  const finalClientName = clientName ? String(clientName).trim() : `Mijoz ${db.getAppointments(userId).length + 1}`;
+  const finalClientPhone = clientPhone ? String(clientPhone).trim() : '';
+  const finalPrice = Number(servicePrice) || 50000;
+
+  let clientObj;
+  if (finalClientPhone) {
+    clientObj = db.createOrUpdateClient(userId, finalClientName, finalClientPhone, finalPrice);
+  }
+
   const newAppointment: Appointment = {
-    id: `apt-${Date.now()}`,
-    userId: 'u-1',
-    clientId: `c-${Date.now()}`,
-    clientName: clientName || `Mijoz ${db.appointments.length + 1}`,
-    clientPhone: clientPhone || '',
+    id: `apt-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+    userId,
+    clientId: clientObj?.id,
+    clientName: finalClientName,
+    clientPhone: finalClientPhone,
     serviceId: serviceId || 'srv-1',
     serviceName: serviceName || 'Soch olish',
-    servicePrice: Number(servicePrice) || 50000,
+    servicePrice: finalPrice,
     badgeColor: badgeColor || '#A67C2E',
     date,
     startTime,
@@ -122,49 +146,58 @@ router.post('/', (req: Request, res: Response): void => {
     status: 'confirmed',
   };
 
-  db.appointments.push(newAppointment);
+  db.createAppointment(newAppointment);
   res.status(201).json({ success: true, appointment: newAppointment });
 });
 
 // PUT /appointments/:id - Edit client name, phone, service, date
-router.put('/:id', (req: Request, res: Response): void => {
+router.put('/:id', (req: AuthRequest, res: Response): void => {
+  const userId = req.user!.userId;
   const { id } = req.params;
-  const index = db.appointments.findIndex((a) => a.id === id);
+  const current = db.getAppointmentById(id);
 
-  if (index === -1) {
-    res.status(404).json({ error: 'Bandlik topilmadi' });
+  if (!current || current.userId !== userId) {
+    res.status(404).json({ error: 'Bandlik topilmadi yoki ruxsat berilmagan' });
     return;
   }
 
-  const current = db.appointments[index];
-  db.appointments[index] = {
-    ...current,
-    ...req.body,
-  };
-
-  // If client details updated, update the client entity as well
-  if (req.body.clientName || req.body.clientPhone) {
-    const client = db.clients.find((c) => c.id === current.clientId);
-    if (client) {
-      if (req.body.clientName) client.name = req.body.clientName;
-      if (req.body.clientPhone) client.phone = req.body.clientPhone;
+  // If changing slot, verify no collision
+  if (req.body.date || req.body.startTime) {
+    const targetDate = req.body.date || current.date;
+    const targetTime = req.body.startTime || current.startTime;
+    if (db.hasActiveSlotConflict(userId, targetDate, targetTime, id)) {
+      res.status(409).json({ error: "Ushbu vaqt oralig'i allaqachon band qilingan" });
+      return;
     }
   }
 
-  res.json({ success: true, appointment: db.appointments[index] });
+  const updated = db.updateAppointment(id, {
+    ...req.body,
+    userId, // immutable owner
+  });
+
+  // If client details updated, sync client entity
+  if (req.body.clientName || req.body.clientPhone) {
+    if (updated?.clientPhone) {
+      db.createOrUpdateClient(userId, updated.clientName, updated.clientPhone, 0);
+    }
+  }
+
+  res.json({ success: true, appointment: updated });
 });
 
 // DELETE /appointments/:id
-router.delete('/:id', (req: Request, res: Response): void => {
+router.delete('/:id', (req: AuthRequest, res: Response): void => {
+  const userId = req.user!.userId;
   const { id } = req.params;
-  const initialLen = db.appointments.length;
-  db.appointments = db.appointments.filter((a) => a.id !== id);
+  const current = db.getAppointmentById(id);
 
-  if (db.appointments.length === initialLen) {
-    res.status(404).json({ error: 'Bandlik topilmadi' });
+  if (!current || current.userId !== userId) {
+    res.status(404).json({ error: 'Bandlik topilmadi yoki ruxsat berilmagan' });
     return;
   }
 
+  db.appointments = db.appointments.filter((a) => a.id !== id);
   res.json({ success: true, message: "Bandlik bekor qilindi va o'chirildi" });
 });
 

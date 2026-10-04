@@ -1,15 +1,22 @@
-import { Router, Request, Response } from 'express';
+import { Router, Response } from 'express';
 import { db, Service } from '../db';
+import { authenticateToken, AuthRequest } from '../middleware/auth';
 
 const router = Router();
 
-// GET /services
-router.get('/', (req: Request, res: Response) => {
-  res.json({ services: db.services });
+// Apply auth to all service endpoints
+router.use(authenticateToken);
+
+// GET /services (Lists master's services)
+router.get('/', (req: AuthRequest, res: Response) => {
+  const userId = req.user!.userId;
+  const services = db.getServices(userId);
+  res.json({ services });
 });
 
-// POST /services
-router.post('/', (req: Request, res: Response): void => {
+// POST /services (Creates a service for current master)
+router.post('/', (req: AuthRequest, res: Response): void => {
+  const userId = req.user!.userId;
   const { name, price, duration, badgeColor, isActive } = req.body;
 
   if (!name || price === undefined) {
@@ -18,9 +25,9 @@ router.post('/', (req: Request, res: Response): void => {
   }
 
   const newService: Service = {
-    id: `srv-${Date.now()}`,
-    userId: 'u-1',
-    name,
+    id: `srv-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+    userId,
+    name: String(name).trim(),
     price: Number(price),
     duration: Number(duration) || 30,
     badgeColor: badgeColor || '#A67C2E',
@@ -31,13 +38,14 @@ router.post('/', (req: Request, res: Response): void => {
   res.status(201).json({ success: true, service: newService });
 });
 
-// PUT /services/:id
-router.put('/:id', (req: Request, res: Response): void => {
+// PUT /services/:id (Updates master's own service)
+router.put('/:id', (req: AuthRequest, res: Response): void => {
+  const userId = req.user!.userId;
   const { id } = req.params;
-  const index = db.services.findIndex((s) => s.id === id);
+  const index = db.services.findIndex((s) => s.id === id && s.userId === userId);
 
   if (index === -1) {
-    res.status(404).json({ error: 'Xizmat topilmadi' });
+    res.status(404).json({ error: 'Xizmat topilmadi yoki ruxsat berilmagan' });
     return;
   }
 
@@ -45,6 +53,8 @@ router.put('/:id', (req: Request, res: Response): void => {
   db.services[index] = {
     ...current,
     ...req.body,
+    userId, // immutable owner
+    name: req.body.name !== undefined ? String(req.body.name).trim() : current.name,
     price: req.body.price !== undefined ? Number(req.body.price) : current.price,
     duration: req.body.duration !== undefined ? Number(req.body.duration) : current.duration,
   };
@@ -52,14 +62,15 @@ router.put('/:id', (req: Request, res: Response): void => {
   res.json({ success: true, service: db.services[index] });
 });
 
-// DELETE /services/:id
-router.delete('/:id', (req: Request, res: Response): void => {
+// DELETE /services/:id (Deletes master's own service)
+router.delete('/:id', (req: AuthRequest, res: Response): void => {
+  const userId = req.user!.userId;
   const { id } = req.params;
   const initialLength = db.services.length;
-  db.services = db.services.filter((s) => s.id !== id);
+  db.services = db.services.filter((s) => !(s.id === id && s.userId === userId));
 
   if (db.services.length === initialLength) {
-    res.status(404).json({ error: 'Xizmat topilmadi' });
+    res.status(404).json({ error: 'Xizmat topilmadi yoki ruxsat berilmagan' });
     return;
   }
 

@@ -25,10 +25,15 @@ export const AnalitikaScreen: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<AnalyticsData | null>(null);
 
+  const now = new Date();
+  const defaultFrom = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+  const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const defaultTo = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+
   // Custom date range bottom sheet
   const [isRangeSheetVisible, setIsRangeSheetVisible] = useState(false);
-  const [startDateInput, setStartDateInput] = useState('2026-09-01');
-  const [endDateInput, setEndDateInput] = useState('2026-09-30');
+  const [startDateInput, setStartDateInput] = useState(defaultFrom);
+  const [endDateInput, setEndDateInput] = useState(defaultTo);
   const [rangeError, setRangeError] = useState<string | null>(null);
 
   const fetchAnalytics = useCallback(

@@ -7,7 +7,6 @@ import {
   TouchableOpacity,
   TextInput,
   Platform,
-  Alert,
   Linking,
   TouchableWithoutFeedback,
 } from 'react-native';
@@ -29,11 +28,45 @@ import { Button } from '../components/Button';
 import { SwipeableAppointmentCard } from '../components/SwipeableAppointmentCard';
 import { Appointment, Service } from '../types';
 import { api } from '../api/apiClient';
-import { confirmAction } from '../utils/alerts';
+import { confirmAction, showToast } from '../utils/alerts';
 
 interface JadvalScreenProps {
   onAddServicePress?: () => void;
 }
+
+const UZ_MONTHS = [
+  'Yanvar', 'Fevral', 'Mart', 'Aprel', 'May', 'Iyun',
+  'Iyul', 'Avgust', 'Sentyabr', 'Oktabr', 'Noyabr', 'Dekabr'
+];
+
+const UZ_DAYS = ['Yak', 'Dush', 'Se', 'Cho', 'Pay', 'Jum', 'Sha'];
+
+const generateDateStrip = (daysBefore = 7, daysAfter = 21) => {
+  const strip = [];
+  const today = new Date();
+  const start = new Date(today);
+  start.setDate(today.getDate() - daysBefore);
+
+  for (let i = 0; i <= daysBefore + daysAfter; i++) {
+    const d = new Date(start);
+    d.setDate(start.getDate() + i);
+
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    const fullDate = `${year}-${month}-${day}`;
+
+    strip.push({
+      dayNumber: String(d.getDate()),
+      dayName: UZ_DAYS[d.getDay()],
+      monthName: UZ_MONTHS[d.getMonth()],
+      year: d.getFullYear(),
+      fullDate,
+      isToday: i === daysBefore,
+    });
+  }
+  return strip;
+};
 
 // 5 default services as specified in prompt v2
 const DEFAULT_SERVICES: Service[] = [
@@ -47,7 +80,8 @@ const DEFAULT_SERVICES: Service[] = [
 export const JadvalScreen: React.FC<JadvalScreenProps> = () => {
   const { t } = useTranslation();
   const [showIncome, setShowIncome] = useState(true);
-  const [selectedDateIndex, setSelectedDateIndex] = useState(1); // Tuesday 29-Sep
+  const [daysStrip] = useState(() => generateDateStrip(7, 21));
+  const [selectedDateIndex, setSelectedDateIndex] = useState(7); // Today by default
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [services, setServices] = useState<Service[]>(DEFAULT_SERVICES);
 
@@ -60,18 +94,6 @@ export const JadvalScreen: React.FC<JadvalScreenProps> = () => {
 
   // Currently swiped appointment ID
   const [swipedAptId, setSwipedAptId] = useState<string | null>(null);
-
-  // Days strip: Se, Cho, Pay, Jum, Sha, Yak
-  const daysStrip = [
-    { dayNumber: '28', dayName: 'Dush', fullDate: '2026-09-28' },
-    { dayNumber: '29', dayName: 'Se', fullDate: '2026-09-29' },
-    { dayNumber: '30', dayName: 'Cho', fullDate: '2026-09-30' },
-    { dayNumber: '1', dayName: 'Pay', fullDate: '2026-10-01' },
-    { dayNumber: '2', dayName: 'Jum', fullDate: '2026-10-02' },
-    { dayNumber: '3', dayName: 'Sha', fullDate: '2026-10-03' },
-    { dayNumber: '4', dayName: 'Yak', fullDate: '2026-10-04' },
-    { dayNumber: '5', dayName: 'Dush', fullDate: '2026-10-05' },
-  ];
 
   const currentDateObj = daysStrip[selectedDateIndex] || daysStrip[0];
 
@@ -256,36 +278,42 @@ export const JadvalScreen: React.FC<JadvalScreenProps> = () => {
     }
   };
 
-  // Cancel Appointment
+  // Cancel Appointment with Optimistic UI and Rollback
   const handleCancelApt = (aptId: string) => {
+    const targetApt = appointments.find((a) => a.id === aptId);
     confirmAction(
       'Yozuvni bekor qilish',
-      'Haqiqatan ham ushbu yozuvni bekor qilmoqchimisiz?',
+      targetApt
+        ? `${targetApt.clientName} (${targetApt.startTime}) yozuvini bekor qilmoqchimisiz?`
+        : 'Haqiqatan ham ushbu yozuvni bekor qilmoqchimisiz?',
       async () => {
+        const previousApts = [...appointments];
         setAppointments((prev) => prev.filter((a) => a.id !== aptId));
         setSwipedAptId(null);
         try {
           await api.deleteAppointment(aptId);
-        } catch (e) {}
+          showToast('Yozuv bekor qilindi', 'info');
+        } catch (e: any) {
+          // Rollback on error
+          setAppointments(previousApts);
+          showToast(e.message || "Yozuvni bekor qilib bo'lmadi. Qayta urinib ko'ring", 'error');
+        }
       },
       'Ha, bekor qilish',
-      "Yo'q"
+      "Yo'q",
+      true
     );
   };
 
   // Call Client
   const handleCallClient = (phone?: string) => {
     if (!phone || phone.trim() === '' || phone === '+998 90 000 00 00') {
-      Alert.alert(
-        'Telefon raqam mavjud emas',
-        "Iltimos, avval mijoz telefon raqamini kiriting",
-        [{ text: 'OK' }]
-      );
+      showToast('Iltimos, avval mijoz telefon raqamini kiriting', 'error');
       return;
     }
     const cleanPhone = phone.replace(/[^\d+]/g, '');
     Linking.openURL(`tel:${cleanPhone}`).catch(() => {
-      Alert.alert('Qo\'ng\'iroq', `${phone} raqamiga qo'ng'iroq qilinmoqda...`);
+      showToast(`${phone} raqamiga qo'ng'iroq qilinmoqda...`, 'info');
     });
   };
 
@@ -295,7 +323,7 @@ export const JadvalScreen: React.FC<JadvalScreenProps> = () => {
         {/* 1. Header Bar: Month dropdown & Day Total with Eye toggle */}
         <View style={styles.topHeader}>
           <TouchableOpacity style={styles.monthSelector} activeOpacity={0.7}>
-            <Text style={styles.monthText}>Sentyabr, 2026</Text>
+            <Text style={styles.monthText}>{`${currentDateObj.monthName}, ${currentDateObj.year}`}</Text>
             <ChevronDown size={18} color={colors.textPrimary} />
           </TouchableOpacity>
 

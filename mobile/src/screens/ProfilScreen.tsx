@@ -8,7 +8,7 @@ import {
   Alert,
   Platform,
 } from 'react-native';
-import { confirmAction } from '../utils/alerts';
+import { confirmAction, showToast } from '../utils/alerts';
 import {
   Copy,
   ChevronRight,
@@ -21,6 +21,9 @@ import {
   Store,
   Globe,
   Sun,
+  Moon,
+  Smartphone,
+  Check,
   Shield,
   HelpCircle,
   FileCheck,
@@ -28,6 +31,8 @@ import {
 } from 'lucide-react-native';
 import { colors, COLOR_PRIMARY } from '../theme/theme';
 import { useTranslation } from '../i18n/LanguageContext';
+import { useTheme } from '../theme/ThemeContext';
+import { BottomSheet } from '../components/BottomSheet';
 import { BookingLinkScreen } from './BookingLinkScreen';
 import { WorkingHoursScreen } from './WorkingHoursScreen';
 import { NotificationsScreen } from './NotificationsScreen';
@@ -58,10 +63,12 @@ type SubScreen =
 
 export const ProfilScreen: React.FC<ProfilScreenProps> = ({ onLogout, onOpenAddService }) => {
   const { t, language } = useTranslation();
+  const { themeMode, setThemeMode } = useTheme();
   const [activeSubScreen, setActiveSubScreen] = useState<SubScreen>(null);
   const [isClientPreviewVisible, setIsClientPreviewVisible] = useState(false);
   const [isHelpVisible, setIsHelpVisible] = useState(false);
   const [isLegalDocsVisible, setIsLegalDocsVisible] = useState(false);
+  const [isAppearanceSheetVisible, setIsAppearanceSheetVisible] = useState(false);
   const [userData, setUserData] = useState<{ ism: string; familiya: string; phone: string }>({
     ism: 'Abubakir',
     familiya: 'Aliyev',
@@ -94,7 +101,7 @@ export const ProfilScreen: React.FC<ProfilScreenProps> = ({ onLogout, onOpenAddS
         navigator.clipboard.writeText(bookingUrl);
       }
     } catch (e) {}
-    Alert.alert(t('copySuccess'), bookingUrl);
+    showToast(t('copySuccess') || 'Havola nusxalandi!', 'success');
   };
 
   const handleLogoutPress = () => {
@@ -329,7 +336,7 @@ export const ProfilScreen: React.FC<ProfilScreenProps> = ({ onLogout, onOpenAddS
             {/* Ko'rinish */}
             <TouchableOpacity
               style={styles.menuItem}
-              onPress={() => Alert.alert(t('appearance'), "Yorug' mavzu faol")}
+              onPress={() => setIsAppearanceSheetVisible(true)}
               activeOpacity={0.7}
             >
               <View style={styles.menuItemLeft}>
@@ -339,7 +346,9 @@ export const ProfilScreen: React.FC<ProfilScreenProps> = ({ onLogout, onOpenAddS
                 <Text style={styles.menuItemLabel}>{t('appearance')}</Text>
               </View>
               <View style={styles.valueRow}>
-                <Text style={styles.valueText}>{t('lightMode')}</Text>
+                <Text style={styles.valueText}>
+                  {themeMode === 'dark' ? "Qorong'i" : themeMode === 'system' ? 'Tizim' : "Yorug'"}
+                </Text>
                 <ChevronRight size={18} color={colors.textMuted} />
               </View>
             </TouchableOpacity>
@@ -423,11 +432,86 @@ export const ProfilScreen: React.FC<ProfilScreenProps> = ({ onLogout, onOpenAddS
         onClose={() => setIsHelpVisible(false)}
       />
 
-      {/* Legal Documents modal */}
-      <LegalDocsModal
-        visible={isLegalDocsVisible}
-        onClose={() => setIsLegalDocsVisible(false)}
-      />
+      {/* Appearance modal sheet */}
+      <BottomSheet
+        visible={isAppearanceSheetVisible}
+        onClose={() => setIsAppearanceSheetVisible(false)}
+        title={t('appearance') || "Ko'rinish"}
+      >
+        <View style={styles.appearanceList}>
+          {/* Light */}
+          <TouchableOpacity
+            style={[
+              styles.appearanceOption,
+              themeMode === 'light' && styles.appearanceOptionActive,
+            ]}
+            onPress={() => {
+              setThemeMode('light');
+              setIsAppearanceSheetVisible(false);
+            }}
+            activeOpacity={0.7}
+          >
+            <View style={styles.appearanceOptionLeft}>
+              <View style={[styles.menuIconWrap, { backgroundColor: '#FAF6F0' }]}>
+                <Sun size={20} color={COLOR_PRIMARY} />
+              </View>
+              <View>
+                <Text style={styles.appearanceTitle}>Yorug' mavzu</Text>
+                <Text style={styles.appearanceSub}>Klassik iliq krem dizayn</Text>
+              </View>
+            </View>
+            {themeMode === 'light' && <Check size={20} color={COLOR_PRIMARY} strokeWidth={2.5} />}
+          </TouchableOpacity>
+
+          {/* Dark */}
+          <TouchableOpacity
+            style={[
+              styles.appearanceOption,
+              themeMode === 'dark' && styles.appearanceOptionActive,
+            ]}
+            onPress={() => {
+              setThemeMode('dark');
+              setIsAppearanceSheetVisible(false);
+            }}
+            activeOpacity={0.7}
+          >
+            <View style={styles.appearanceOptionLeft}>
+              <View style={[styles.menuIconWrap, { backgroundColor: '#26221C' }]}>
+                <Moon size={20} color="#F5EFE6" />
+              </View>
+              <View>
+                <Text style={styles.appearanceTitle}>Qorong'i mavzu</Text>
+                <Text style={styles.appearanceSub}>Tungi vaqtda ko'zga qulay</Text>
+              </View>
+            </View>
+            {themeMode === 'dark' && <Check size={20} color={COLOR_PRIMARY} strokeWidth={2.5} />}
+          </TouchableOpacity>
+
+          {/* System */}
+          <TouchableOpacity
+            style={[
+              styles.appearanceOption,
+              themeMode === 'system' && styles.appearanceOptionActive,
+            ]}
+            onPress={() => {
+              setThemeMode('system');
+              setIsAppearanceSheetVisible(false);
+            }}
+            activeOpacity={0.7}
+          >
+            <View style={styles.appearanceOptionLeft}>
+              <View style={[styles.menuIconWrap, { backgroundColor: '#FAF6F0' }]}>
+                <Smartphone size={20} color={COLOR_PRIMARY} />
+              </View>
+              <View>
+                <Text style={styles.appearanceTitle}>Tizim sozlamasi</Text>
+                <Text style={styles.appearanceSub}>Qurilma rejimiga moslashadi</Text>
+              </View>
+            </View>
+            {themeMode === 'system' && <Check size={20} color={COLOR_PRIMARY} strokeWidth={2.5} />}
+          </TouchableOpacity>
+        </View>
+      </BottomSheet>
     </View>
   );
 };
@@ -593,5 +677,38 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.textMuted,
     marginTop: 4,
+  },
+  appearanceList: {
+    paddingVertical: 8,
+    gap: 10,
+  },
+  appearanceOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 14,
+    borderRadius: 16,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+  },
+  appearanceOptionActive: {
+    borderColor: COLOR_PRIMARY,
+    backgroundColor: colors.primaryLight,
+  },
+  appearanceOptionLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  appearanceTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: colors.textPrimary,
+  },
+  appearanceSub: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 2,
   },
 });

@@ -9,7 +9,7 @@ const getApiBaseUrl = () => {
   if (typeof window !== 'undefined' && window.location) {
     const hostname = window.location.hostname;
     if (hostname !== 'localhost' && hostname !== '127.0.0.1') {
-      return ''; // Relative to origin in production (Vercel)
+      return ''; // Relative in production (Vercel)
     }
   }
   return 'http://127.0.0.1:5000';
@@ -21,11 +21,12 @@ const TOKEN_KEY = 'barbero_token';
 class ApiClient {
   private token: string | null = null;
 
-  async initToken() {
+  async initToken(): Promise<string | null> {
     try {
       this.token = (await AsyncStorage.getItem(TOKEN_KEY)) || (await AsyncStorage.getItem('app_token'));
+      return this.token;
     } catch (e) {
-      // ignore
+      return null;
     }
   }
 
@@ -40,6 +41,10 @@ class ApiClient {
     AsyncStorage.removeItem('app_token');
   }
 
+  getToken(): string | null {
+    return this.token;
+  }
+
   private async fetchWithTimeout(url: string, options: RequestInit, timeoutMs = 15000): Promise<Response> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -50,13 +55,20 @@ class ApiClient {
       });
       clearTimeout(timer);
       return response;
-    } catch (error) {
+    } catch (error: any) {
       clearTimeout(timer);
+      if (error.name === 'AbortError') {
+        throw new Error("Internet tezligi past yoki server javob bermayapti (15s timeout)");
+      }
       throw error;
     }
   }
 
   private async request<T>(endpoint: string, options: RequestInit = {}, retries = 2): Promise<T> {
+    if (!this.token) {
+      await this.initToken();
+    }
+
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       ...(options.headers as any),
@@ -72,393 +84,352 @@ class ApiClient {
 
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       try {
-        const response = await this.fetchWithTimeout(`${API_BASE_URL}${endpoint}`, {
-          ...options,
-          headers,
-        }, 15000);
+        const response = await this.fetchWithTimeout(
+          `${API_BASE_URL}${endpoint}`,
+          {
+            ...options,
+            headers,
+          },
+          15000
+        );
 
         if (!response.ok) {
-          if (response.status === 405 || response.status === 404 || response.status >= 500) {
-            return this.mockFallback<T>(endpoint, options);
-          }
           const errorData = await response.json().catch(() => ({}));
-          throw new Error(errorData.error || `Request failed with status ${response.status}`);
+          const errMsg = errorData.error || errorData.message || `Server xatosi: ${response.status}`;
+          const err: any = new Error(errMsg);
+          err.status = response.status;
+          err.code = errorData.code;
+          throw err;
         }
 
         return await response.json();
       } catch (err: any) {
         lastError = err;
+        // Don't retry 4xx errors (client / auth errors)
+        if (err.status && err.status >= 400 && err.status < 500) {
+          throw err;
+        }
         if (attempt < maxAttempts - 1) {
-          // Wait with exponential backoff: 300ms, 600ms
-          await new Promise((resolve) => setTimeout(resolve, 300 * (attempt + 1)));
+          // Exponential backoff
+          await new Promise((resolve) => setTimeout(resolve, 350 * (attempt + 1)));
         }
       }
     }
 
-    console.warn(`[ApiClient] Request to ${endpoint} failed after ${maxAttempts} attempts:`, lastError?.message);
-    return this.mockFallback<T>(endpoint, options);
+    throw lastError || new Error("Server bilan bog'lanishda xatolik yuz berdi");
   }
 
-  private mockFallback<T>(endpoint: string, options: RequestInit = {}): T {
-    const body = options.body ? JSON.parse(options.body as string) : {};
-
-    if (endpoint.startsWith('/auth/send-code')) {
-      return {
-        success: true,
-        requestId: 'req_' + Date.now(),
-        ttl: 120,
-        testCode: '111111',
-        demo: true,
-      } as any;
-    }
-
-    if (endpoint.startsWith('/auth/verify')) {
-      const mockUser: User = {
-        id: 'u-1',
-        phone: body.phone || '+998900335102',
-        ism: 'Abubakir',
-        familiya: 'Aliyev',
-        fullName: 'Abubakir Aliyev',
-        username: 'abubakir',
-        role: 'MASTER',
-      };
-      const token = 'jwt_mock_token_' + Date.now();
-      this.setToken(token);
-      return {
-        success: true,
-        tokens: { accessToken: token, refreshToken: token },
-        user: mockUser,
-      } as any;
-    }
-
-    if (endpoint.startsWith('/auth/register-profile')) {
-      return {
-        success: true,
-        user: {
-          id: 'u-1',
-          ism: body.ism || 'Abubakir',
-          familiya: body.familiya || 'Aliyev',
-          phone: body.phone || '+998900335102',
-          fullName: `${body.ism || 'Abubakir'} ${body.familiya || 'Aliyev'}`,
-          username: (body.ism || 'abubakir').toLowerCase(),
-          role: body.role || 'MASTER',
-        },
-      } as any;
-    }
-
-    if (endpoint.startsWith('/analytics')) {
-      return {
-        period: 'oy',
-        from: '2026-09-01',
-        to: '2026-09-30',
-        revenue: {
-          total: 120000,
-          formatted: '120 000 uzs',
-          totalBookings: 2,
-          avgPayment: 60000,
-          growthRate: 'Yangi',
-          title: 'Oylik daromad',
-          subtitle: "2 ta yozuv, o'rtacha to'lov 60 000 uzs",
-        },
-        metrics: {
-          clients: {
-            total: 2,
-            growth: '+2 yangi mijoz',
-            newClients: 2,
-          },
-          occupancy: {
-            percent: '4%',
-            ratio: '1/26 kun',
-            bookedDays: 1,
-            workingDays: 26,
-          },
-        },
-        dynamics: {
-          title: 'Tushum dinamikasi',
-          subtitle: "Kunlar bo'yicha",
-          badge: 'Yangi',
-          chart: [
-            { label: '28', month: '28', amount: 0, heightPercent: 6 },
-            { label: '29', month: '29', amount: 120000, heightPercent: 100, isCurrent: true },
-            { label: '30', month: '30', amount: 0, heightPercent: 6 },
-          ],
-        },
-      } as any;
-    }
-
-    if (endpoint.startsWith('/auth/me') || endpoint.startsWith('/profile')) {
-      return {
-        user: {
-          id: 'u-1',
-          ism: 'Abubakir',
-          familiya: 'Aliyev',
-          fullName: 'Abubakir Aliyev',
-          username: 'abubakir',
-          phone: '+998 90 033 51 02',
-          role: 'MASTER',
-        },
-        bookingLink: 'http://localhost:8081/b/abubakir',
-        settings: {
-          bookingLinkActive: true,
-          allowCustomTimeRequest: false,
-          allowLunchTimeBooking: false,
-          dailyReminderActive: true,
-          dailyReminderTime: '09:00',
-          aiModeActive: true,
-          clientSmsReminderActive: true,
-          appLanguage: 'uz',
-          biometricsEnabled: true,
-        },
-        appVersion: '1.0.9',
-      } as any;
-    }
-
-    if (endpoint.startsWith('/push/vapid-public-key')) {
-      return {
-        publicKey: 'BM-8Mn8egdGXkKokUrxWVl5XabsOj-b3ZfHIQ-bb879jaiY6uGatyTcSUV5fu2-vE20kDGywC8ruGWno9kU-M1U',
-      } as any;
-    }
-
-    return { success: true } as any;
+  // --- Auth ---
+  async sendCode(phone: string): Promise<{ success: boolean; requestId?: string; ttl?: number; message?: string }> {
+    return this.request('/auth/send-code', {
+      method: 'POST',
+      body: JSON.stringify({ phone }),
+    });
   }
 
-  // Auth
-  async sendCode(phone: string) {
-    return this.request<{ success: boolean; requestId: string; ttl: number; testCode?: string; demo?: boolean }>(
-      '/auth/send-code',
-      {
-        method: 'POST',
-        body: JSON.stringify({ phone }),
-      }
-    );
-  }
-
-  async verifyCode(phone: string, code: string, requestId?: string) {
-    const data = await this.request<{
-      success: boolean;
-      tokens: { accessToken: string; refreshToken: string };
-      user: User;
-      isNewUser?: boolean;
-    }>('/auth/verify', {
+  async verifyCode(
+    phone: string,
+    code: string,
+    requestId?: string
+  ): Promise<{ success: boolean; isNewUser?: boolean; tokens?: { accessToken: string; refreshToken: string }; user?: User }> {
+    const res = await this.request<any>('/auth/verify', {
       method: 'POST',
       body: JSON.stringify({ phone, code, requestId }),
     });
-
-    if (data.tokens?.accessToken) {
-      this.setToken(data.tokens.accessToken);
+    if (res.tokens?.accessToken) {
+      this.setToken(res.tokens.accessToken);
     }
-    return data;
+    return res;
   }
 
-  async registerProfile(ism: string, familiya: string, phone?: string, role?: string) {
-    return this.request<{ success: boolean; user: any }>('/auth/register-profile', {
+  async registerProfile(
+    ism: string,
+    familiya: string,
+    role?: 'MASTER' | 'CLIENT'
+  ): Promise<{ success: boolean; user: User }> {
+    return this.request('/auth/register-profile', {
       method: 'POST',
-      body: JSON.stringify({ ism, familiya, phone, role }),
+      body: JSON.stringify({ ism, familiya, role }),
     });
   }
 
-  async getMe() {
-    return this.request<{ user: User }>('/auth/me');
+  async getMe(): Promise<{ user: User }> {
+    return this.request('/auth/me');
   }
 
-  // Schedule / Appointments
-  async getAppointments(date?: string) {
-    const query = date ? `?date=${date}` : '';
-    return this.request<{ appointments: Appointment[]; dayTotal: number; count: number }>(
-      `/appointments${query}`
-    );
+  // --- Services ---
+  async getServices(): Promise<{ services: Service[] }> {
+    return this.request('/services');
   }
 
-  async quickBookAppointment(data: { date: string; startTime: string; serviceId?: string }) {
-    return this.request<{ success: boolean; appointment: Appointment }>('/appointments/quick', {
+  async createService(service: Partial<Service>): Promise<{ success: boolean; service: Service }> {
+    return this.request('/services', {
       method: 'POST',
-      body: JSON.stringify(data),
+      body: JSON.stringify(service),
     });
   }
 
-  async createAppointment(data: Partial<Appointment>) {
-    return this.request<{ success: boolean; appointment: Appointment }>('/appointments', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
-  }
-
-  async updateAppointment(id: string, data: Partial<Appointment>) {
-    return this.request<{ success: boolean; appointment: Appointment }>(`/appointments/${id}`, {
+  async updateService(id: string, service: Partial<Service>): Promise<{ success: boolean; service: Service }> {
+    return this.request(`/services/${id}`, {
       method: 'PUT',
-      body: JSON.stringify(data),
+      body: JSON.stringify(service),
     });
   }
 
-  async deleteAppointment(id: string) {
-    return this.request<{ success: boolean; message: string }>(`/appointments/${id}`, {
+  async deleteService(id: string): Promise<{ success: boolean }> {
+    return this.request(`/services/${id}`, {
       method: 'DELETE',
     });
   }
 
-  // Services
-  async getServices() {
-    return this.request<{ services: Service[] }>('/services');
+  // --- Appointments ---
+  async getAppointments(date?: string): Promise<{ appointments: Appointment[]; dayTotal: number; count: number }> {
+    const query = date ? `?date=${date}` : '';
+    return this.request(`/appointments${query}`);
   }
 
-  async createService(data: Partial<Service>) {
-    return this.request<{ success: boolean; service: Service }>('/services', {
+  async createAppointment(appointment: Partial<Appointment>): Promise<{ success: boolean; appointment: Appointment }> {
+    return this.request('/appointments', {
       method: 'POST',
-      body: JSON.stringify(data),
+      body: JSON.stringify(appointment),
     });
   }
 
-  async deleteService(id: string) {
-    return this.request<{ success: boolean; message: string }>(`/services/${id}`, {
+  async quickBook(date: string, startTime: string): Promise<{ success: boolean; appointment: Appointment }> {
+    return this.request('/appointments/quick', {
+      method: 'POST',
+      body: JSON.stringify({ date, startTime }),
+    });
+  }
+
+  async updateAppointment(id: string, appointment: Partial<Appointment>): Promise<{ success: boolean; appointment: Appointment }> {
+    return this.request(`/appointments/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(appointment),
+    });
+  }
+
+  async deleteAppointment(id: string): Promise<{ success: boolean }> {
+    return this.request(`/appointments/${id}`, {
       method: 'DELETE',
     });
   }
 
-  // Analytics
-  async getAnalytics(period: 'hafta' | 'oy' | 'yil' | 'custom' = 'oy', from?: string, to?: string) {
-    let query = `?period=${period}`;
-    if (from) query += `&from=${from}`;
-    if (to) query += `&to=${to}`;
-    return this.request<AnalyticsData>(`/analytics${query}`);
+  // --- Clients ---
+  async getClients(): Promise<{ clients: any[] }> {
+    return this.request('/clients');
   }
 
-  // Portfolio
-  async getPortfolio() {
-    return this.request<{ photos: PortfolioPhoto[] }>('/portfolio');
+  async getClient(id: string): Promise<{ client: any; appointments: Appointment[] }> {
+    return this.request(`/clients/${id}`);
   }
 
-  async addPortfolioPhoto(imageUrl: string, caption: string) {
-    return this.request<{ success: boolean; photo: PortfolioPhoto }>('/portfolio', {
-      method: 'POST',
-      body: JSON.stringify({ imageUrl, caption }),
+  async updateClient(id: string, client: any): Promise<{ success: boolean; client: any }> {
+    return this.request(`/clients/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(client),
     });
   }
 
-  async likePortfolioPhoto(id: string) {
-    return this.request<{ success: boolean; likesCount: number }>(`/portfolio/${id}/like`, {
+  async deleteClient(id: string): Promise<{ success: boolean }> {
+    return this.request(`/clients/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  // --- Analytics ---
+  async getAnalytics(period: 'hafta' | 'oy' | 'yil' | 'custom' = 'oy', from?: string, to?: string): Promise<AnalyticsData> {
+    const params = new URLSearchParams({ period });
+    if (from) params.set('from', from);
+    if (to) params.set('to', to);
+    return this.request(`/analytics?${params.toString()}`);
+  }
+
+  // --- Portfolio ---
+  async getPortfolio(userId?: string): Promise<{ photos: PortfolioPhoto[] }> {
+    const query = userId ? `?userId=${userId}` : '';
+    return this.request(`/portfolio${query}`);
+  }
+
+  async addPortfolioPhoto(photoOrUrl: Partial<PortfolioPhoto> | string, caption?: string): Promise<{ success: boolean; photo: PortfolioPhoto }> {
+    const body = typeof photoOrUrl === 'string'
+      ? { imageUrl: photoOrUrl, caption: caption || '' }
+      : photoOrUrl;
+    return this.request('/portfolio', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  }
+
+  async quickBookAppointment(
+    aptOrDate: Partial<Appointment> | string,
+    startTime?: string,
+    clientName?: string,
+    clientPhone?: string,
+    serviceId?: string
+  ): Promise<{ success: boolean; appointment: Appointment }> {
+    if (typeof aptOrDate === 'object') {
+      return this.createAppointment(aptOrDate);
+    }
+    return this.createAppointment({
+      date: aptOrDate,
+      startTime: startTime || '09:00',
+      clientName: clientName || 'Mijoz',
+      clientPhone: clientPhone || '',
+      serviceId: serviceId || 'srv-1',
+    });
+  }
+
+  async getAllSalons(): Promise<{ salons: Salon[] }> {
+    return this.getSalons();
+  }
+
+  async sendTestPush(endpoint?: string): Promise<{ success: boolean; message: string }> {
+    const res = await this.testPush(endpoint);
+    return {
+      success: res.success,
+      message: res.message || 'Test bildirishnoma yuborildi',
+    };
+  }
+
+  async likePortfolioPhoto(id: string): Promise<{ success: boolean; likesCount: number }> {
+    return this.request(`/portfolio/${id}/like`, {
       method: 'POST',
     });
   }
 
-  // Profile & Settings
-  async getProfile() {
-    return this.request<{
-      user: User;
-      bookingLink: string;
-      settings: UserSettings;
-      appVersion: string;
-    }>('/profile');
+  async deletePortfolioPhoto(id: string): Promise<{ success: boolean }> {
+    return this.request(`/portfolio/${id}`, {
+      method: 'DELETE',
+    });
   }
 
-  async updateWorkingHours(workingHours: WorkingDay[]) {
-    return this.request<{ success: boolean; workingHours: WorkingDay[] }>('/profile/working-hours', {
+  // --- Profile & Working Hours ---
+  async getProfile(): Promise<{ user: User; bookingLink: string; settings: UserSettings; appVersion: string }> {
+    return this.request('/profile');
+  }
+
+  async updateProfile(profile: Partial<User>): Promise<{ success: boolean; user: User }> {
+    return this.request('/profile', {
+      method: 'PUT',
+      body: JSON.stringify(profile),
+    });
+  }
+
+  async getWorkingHours(): Promise<{ workingHours: WorkingDay[] }> {
+    return this.request('/profile/working-hours');
+  }
+
+  async updateWorkingHours(workingHours: WorkingDay[]): Promise<{ success: boolean; workingHours: WorkingDay[] }> {
+    return this.request('/profile/working-hours', {
       method: 'PUT',
       body: JSON.stringify({ workingHours }),
     });
   }
 
-  async updateSettings(settings: Partial<UserSettings>) {
-    return this.request<{ success: boolean; settings: UserSettings }>('/profile/settings', {
+  async updateSettings(settings: Partial<UserSettings>): Promise<{ success: boolean; settings: UserSettings }> {
+    return this.request('/profile/settings', {
       method: 'PUT',
       body: JSON.stringify(settings),
     });
   }
 
-  // Barbershops / Salons (Geolocation grouping 50m)
-  async getNearbySalons(lat: number, lng: number, radius = 50) {
-    return this.request<{ salons: (Salon & { distanceMeters: number })[]; radiusMeters: number }>(
-      `/salons/nearby?lat=${lat}&lng=${lng}&radius=${radius}`
-    );
+  // --- Salons ---
+  async getSalons(): Promise<{ salons: Salon[] }> {
+    return this.request('/salons');
   }
 
-  async joinSalon(salonId: string) {
-    return this.request<{ success: boolean; salon: Salon; membership: any }>('/salons/join', {
+  async getNearbySalons(lat: number, lng: number, radius?: number): Promise<{ radiusMeters: number; foundCount: number; salons: Salon[] }> {
+    const r = radius || 50;
+    return this.request(`/salons/nearby?lat=${lat}&lng=${lng}&radius=${r}`);
+  }
+
+  async joinSalon(salonId: string): Promise<{ success: boolean; salon: Salon }> {
+    return this.request('/salons/join', {
       method: 'POST',
       body: JSON.stringify({ salonId }),
     });
   }
 
-  async createSalon(data: { name: string; address?: string; lat: number; lng: number }) {
-    return this.request<{ success: boolean; salon: Salon; membership: any }>('/salons/create', {
+  async createSalon(salon: Partial<Salon>): Promise<{ success: boolean; salon: Salon }> {
+    return this.request('/salons/create', {
       method: 'POST',
-      body: JSON.stringify(data),
+      body: JSON.stringify(salon),
     });
   }
 
-  async getMySalon() {
-    return this.request<{ salon: Salon | null; members: any[] }>('/salons/my');
+  async getMySalon(): Promise<{ salon: Salon | null; members: any[] }> {
+    return this.request('/salons/my');
   }
 
-  async getAllSalons() {
-    return this.request<{ salons: Salon[] }>('/salons');
+  // --- Booking Requests ---
+  async getBookingRequests(): Promise<{ requests: BookingRequest[]; count: number }> {
+    return this.request('/booking-requests');
   }
 
-  // Booking Requests (from public booking link)
-  async getBookingRequests() {
-    return this.request<{ requests: BookingRequest[]; count: number }>('/booking-requests');
-  }
-
-  async createBookingRequest(data: {
-    masterId?: string;
-    clientName: string;
-    clientPhone: string;
-    serviceId: string;
-    date: string;
-    time: string;
-  }) {
-    return this.request<{ success: boolean; message: string; request: any }>('/booking-requests', {
+  async createBookingRequest(req: Partial<BookingRequest>): Promise<{ success: boolean; request: BookingRequest }> {
+    return this.request('/booking-requests', {
       method: 'POST',
-      body: JSON.stringify(data),
+      body: JSON.stringify(req),
     });
   }
 
-  async acceptBookingRequest(id: string) {
-    return this.request<{ success: boolean; message: string; appointment: any }>(
-      `/booking-requests/${id}/accept`,
-      { method: 'POST' }
-    );
+  async acceptBookingRequest(id: string): Promise<{ success: boolean; appointment: Appointment }> {
+    return this.request(`/booking-requests/${id}/accept`, {
+      method: 'POST',
+    });
   }
 
-  async rejectBookingRequest(id: string) {
-    return this.request<{ success: boolean; message: string }>(
-      `/booking-requests/${id}/reject`,
-      { method: 'POST' }
-    );
+  async rejectBookingRequest(id: string): Promise<{ success: boolean }> {
+    return this.request(`/booking-requests/${id}/reject`, {
+      method: 'POST',
+    });
   }
 
-  // Push notifications
-  async getVapidPublicKey() {
-    return this.request<{ publicKey: string }>('/push/vapid-public-key');
+  // --- Public Booking ---
+  async getPublicMasterInfo(username: string): Promise<any> {
+    return this.request(`/public/b/${username}`);
   }
 
-  async subscribePush(subscription: any, device?: string) {
-    return this.request<{ success: boolean; message: string }>('/push/subscribe', {
+  async getPublicAvailableSlots(username: string, date: string): Promise<{ date: string; slots: { time: string; isAvailable: boolean }[] }> {
+    return this.request(`/public/b/${username}/available-slots?date=${date}`);
+  }
+
+  async bookPublicSlot(username: string, booking: any): Promise<{ success: boolean; appointment: Appointment }> {
+    return this.request(`/public/b/${username}/book`, {
+      method: 'POST',
+      body: JSON.stringify(booking),
+    });
+  }
+
+  // --- Web Push ---
+  async getVapidPublicKey(): Promise<{ publicKey: string }> {
+    return this.request('/push/vapid-public-key');
+  }
+
+  async subscribePush(subscription: any, device?: string): Promise<{ success: boolean }> {
+    return this.request('/push/subscribe', {
       method: 'POST',
       body: JSON.stringify({ subscription, device }),
     });
   }
 
-  async unsubscribePush(endpoint: string) {
-    return this.request<{ success: boolean; message: string }>('/push/unsubscribe', {
+  async unsubscribePush(endpoint: string): Promise<{ success: boolean }> {
+    return this.request('/push/unsubscribe', {
       method: 'POST',
       body: JSON.stringify({ endpoint }),
     });
   }
 
-  async sendTestPush(endpoint?: string) {
-    return this.request<{ success: boolean; message: string }>('/push/test', {
+  async testPush(endpoint?: string): Promise<{ success: boolean; message?: string }> {
+    return this.request('/push/test', {
       method: 'POST',
       body: JSON.stringify({ endpoint }),
     });
   }
 
-  async getPushStatus() {
-    return this.request<{ active: boolean; count: number; subscriptions: any[] }>('/push/status');
-  }
-
-  // Public Booking
-  async getPublicBookingInfo(username: string) {
-    return this.request<any>(`/public/b/${username}`);
+  async getPushStatus(): Promise<{ active: boolean; isSubscribed: boolean; count: number; subscriptionsCount: number; subscriptions: any[] }> {
+    return this.request('/push/status');
   }
 }
 

@@ -39,12 +39,14 @@ export function formatUzs(amount: number): string {
   return `${str} uzs`;
 }
 
+import { authenticateToken, AuthRequest } from '../middleware/auth';
+
 // GET /analytics?period=hafta|oy|yil&from=YYYY-MM-DD&to=YYYY-MM-DD&group=day|month
-router.get('/', (req: Request, res: Response): void => {
+router.get('/', authenticateToken, (req: AuthRequest, res: Response): void => {
   const period = (req.query.period as 'hafta' | 'oy' | 'yil' | 'custom') || 'oy';
   let from = req.query.from as string;
   let to = req.query.to as string;
-  const masterId = (req.query.masterId as string) || 'u-1';
+  const masterId = req.user!.userId;
   const group = (req.query.group as 'day' | 'month') || (period === 'yil' ? 'month' : 'day');
 
   const todayStr = getTashkentDateString(new Date());
@@ -145,8 +147,9 @@ router.get('/', (req: Request, res: Response): void => {
   const bookedDays = new Set(currentAppointments.map((a) => a.date)).size;
 
   // Calculate master's total working days in this period according to workingHours schedule
+  const masterWorkingSchedule = db.getWorkingHours(masterId);
   const workingDayIndexes = new Set(
-    db.workingHours.filter((w) => w.isWorking).map((w) => (w.dayIndex === 7 ? 0 : w.dayIndex))
+    masterWorkingSchedule.filter((w) => w.isWorking).map((w) => (w.dayIndex === 7 ? 0 : w.dayIndex))
   );
 
   let totalWorkingDaysInPeriod = 0;

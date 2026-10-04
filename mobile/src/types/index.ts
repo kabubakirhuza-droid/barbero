@@ -142,7 +142,6 @@ export interface UserSettings {
   allowLunchTimeBooking: boolean;
   dailyReminderActive: boolean;
   dailyReminderTime: string;
-  aiModeActive: boolean;
   clientSmsReminderActive: boolean;
   appLanguage: Language;
   securityPin?: string;

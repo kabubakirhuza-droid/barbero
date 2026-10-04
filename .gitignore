@@ -3,11 +3,13 @@ dist/
 mobile/dist/
 backend/dist/
 .env
+.env.*
 .env.local
+backend/.env
+mobile/.env
+backend/data/*.json
 .expo/
 .vercel
 *.log
 .DS_Store
 Thumbs.db
-
-.vercel

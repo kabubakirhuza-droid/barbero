@@ -3,20 +3,18 @@ import jwt from 'jsonwebtoken';
 import { config } from '../config';
 import { db, User } from '../db';
 import { telegramGateway } from '../telegramGateway';
+import { authenticateToken, AuthRequest } from '../middleware/auth';
 
 const router = Router();
 
-interface VerificationSession {
-  phone: string;
-  requestId: string;
-  sentAt: number;
-  attempts: number;
+// Helper to normalize Uzbekistan phone number to standard format +998XXXXXXXXX
+function normalizePhone(raw: string): string {
+  let digits = raw.replace(/\D/g, '');
+  if (digits.length === 9) {
+    digits = `998${digits}`;
+  }
+  return `+${digits}`;
 }
-
-// In-memory verification storage keyed by phone
-const verificationSessions = new Map<string, VerificationSession>();
-// Also keyed by requestId for fast lookup
-const sessionsByRequestId = new Map<string, VerificationSession>();
 
 // POST /auth/send-code
 router.post('/send-code', async (req: Request, res: Response): Promise<void> => {
@@ -27,17 +25,17 @@ router.post('/send-code', async (req: Request, res: Response): Promise<void> => 
       return;
     }
 
-    const cleanPhone = phone.replace(/[^0-9+]/g, '');
-    if (!cleanPhone.startsWith('+')) {
-      res.status(400).json({ error: "Telefon raqami + bilan boshlanishi kerak (masalan, +998901234567)" });
+    const cleanPhone = normalizePhone(phone);
+    if (!/^\+998\d{9}$/.test(cleanPhone)) {
+      res.status(400).json({ error: "Telefon raqami +998XXXXXXXXX formatida bo‘lishi kerak (masalan, +998901234567)" });
       return;
     }
 
-    // Rate limit: 1 send per 60 seconds
-    const existing = verificationSessions.get(cleanPhone);
+    // Persistent rate limit check: 1 send per 60 seconds
+    const existing = db.getOtpSession(cleanPhone);
     const now = Date.now();
-    if (existing && now - existing.sentAt < config.rateLimitSeconds * 1000) {
-      const remainingSeconds = Math.ceil((config.rateLimitSeconds * 1000 - (now - existing.sentAt)) / 1000);
+    if (existing && now - existing.lastSentAt < config.rateLimitSeconds * 1000) {
+      const remainingSeconds = Math.ceil((config.rateLimitSeconds * 1000 - (now - existing.lastSentAt)) / 1000);
       res.status(429).json({
         error: `Iltimos, qayta yuborishdan oldin ${remainingSeconds} soniya kuting`,
         retryAfter: remainingSeconds,
@@ -57,15 +55,8 @@ router.post('/send-code', async (req: Request, res: Response): Promise<void> => 
       return;
     }
 
-    const session: VerificationSession = {
-      phone: cleanPhone,
-      requestId: result.requestId,
-      sentAt: now,
-      attempts: 0,
-    };
-
-    verificationSessions.set(cleanPhone, session);
-    sessionsByRequestId.set(result.requestId, session);
+    // Save session persistently
+    db.saveOtpSession(cleanPhone, result.requestId);
 
     console.log(`[TelegramGateway] Code sent via Telegram Gateway! RequestId: ${result.requestId}`);
 
@@ -98,10 +89,16 @@ router.post('/verify', async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    const cleanPhone = phone ? phone.replace(/[^0-9+]/g, '') : '';
-    let session = requestId ? sessionsByRequestId.get(requestId) : undefined;
-    if (!session && cleanPhone) {
-      session = verificationSessions.get(cleanPhone);
+    const cleanPhone = phone ? normalizePhone(phone) : '';
+    let session = cleanPhone ? db.getOtpSession(cleanPhone) : undefined;
+    if (!session && requestId) {
+      // Find by requestId across otp requests
+      for (const [p, s] of db.otpRequests.entries()) {
+        if (s.requestId === requestId) {
+          session = s;
+          break;
+        }
+      }
     }
 
     if (!session) {
@@ -113,40 +110,35 @@ router.post('/verify', async (req: Request, res: Response): Promise<void> => {
 
     // Limit to max 5 attempts
     if (session.attempts >= config.maxVerificationAttempts) {
-      res.status(400).json({
+      res.status(429).json({
         error: "Kodni kiritish urinishlari soni tugadi (5 ta). Iltimos, yangi kod so'rang",
       });
       return;
     }
 
-    session.attempts += 1;
-
     console.log(
-      `[TelegramGateway] Checking code '${cleanCode}' for requestId ${session.requestId} (attempt ${session.attempts}/${config.maxVerificationAttempts})...`
+      `[TelegramGateway] Checking code for requestId ${session.requestId} (attempt ${session.attempts + 1}/${config.maxVerificationAttempts})...`
     );
 
-    const isTestCode = ['111111', '777777', '123456'].includes(cleanCode);
+    // Strictly verify via Telegram Gateway API
+    const checkResult = await telegramGateway.checkVerificationStatus(session.requestId, cleanCode);
 
-    if (!isTestCode) {
-      // Call real Telegram Gateway API checkVerificationStatus if available
-      const checkResult = await telegramGateway.checkVerificationStatus(session.requestId, cleanCode);
-
-      if (!checkResult.codeValid) {
-        res.status(400).json({
-          error: "Kod noto'g'ri. Sinov uchun '111111' kodidan foydalanishingiz mumkin",
-          codeValid: false,
-          attemptsLeft: Math.max(0, config.maxVerificationAttempts - session.attempts),
-        });
-        return;
-      }
+    if (!checkResult.codeValid) {
+      const attempts = db.incrementOtpAttempts(session.phone);
+      const remainingAttempts = Math.max(0, config.maxVerificationAttempts - attempts);
+      res.status(400).json({
+        error: "Kiritilgan kod noto'g'ri",
+        codeValid: false,
+        attemptsLeft: remainingAttempts,
+      });
+      return;
     }
 
     // Verification successful! Clear session
-    verificationSessions.delete(session.phone);
-    sessionsByRequestId.delete(session.requestId);
+    db.deleteOtpSession(session.phone);
 
-    const userPhone = session.phone || cleanPhone;
-    let user = db.users.find((u) => u.phone === userPhone);
+    const userPhone = session.phone;
+    let user = db.getUserByPhone(userPhone);
     let isNewUser = false;
 
     if (!user) {
@@ -159,15 +151,16 @@ router.post('/verify', async (req: Request, res: Response): Promise<void> => {
         fullName: '',
         username: `user_${userPhone.slice(-4)}`,
         role: 'MASTER',
+        createdAt: new Date().toISOString(),
       };
-      db.users.push(user);
+      db.createUser(user);
     } else if (!user.ism || !user.familiya) {
       isNewUser = true;
     }
 
-    // Generate JWT Access & Refresh tokens
+    // Generate real JWT Access & Refresh tokens
     const accessToken = jwt.sign(
-      { userId: user.id, phone: user.phone, username: user.username },
+      { userId: user.id, phone: user.phone, username: user.username, role: user.role },
       config.jwtSecret,
       { expiresIn: '30d' }
     );
@@ -194,63 +187,56 @@ router.post('/verify', async (req: Request, res: Response): Promise<void> => {
   }
 });
 
-// POST /auth/register-profile (Step 3: Ism and Familiya)
-router.post('/register-profile', async (req: Request, res: Response): Promise<void> => {
+// POST /auth/register-profile (Protected: requires valid token)
+router.post('/register-profile', authenticateToken, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { ism, familiya, phone, role } = req.body;
+    const { ism, familiya, role } = req.body;
 
     if (!ism || !familiya) {
       res.status(400).json({ error: 'Ism va familiya kiritilishi shart' });
       return;
     }
 
-    let user: User | undefined;
-    if (phone) {
-      const cleanPhone = phone.replace(/[^0-9+]/g, '');
-      user = db.users.find((u) => u.phone === cleanPhone);
-    }
+    const userId = req.user!.userId;
+    const cleanIsm = String(ism).trim();
+    const cleanFamiliya = String(familiya).trim();
+    const fullName = `${cleanIsm} ${cleanFamiliya}`;
+    const username = cleanIsm.toLowerCase().replace(/[^a-z0-9]/g, '') || `master_${userId.slice(-4)}`;
 
-    if (!user) {
-      user = db.users[0];
-    }
+    const updatedUser = db.updateUser(userId, {
+      ism: cleanIsm,
+      familiya: cleanFamiliya,
+      fullName,
+      username,
+      role: role === 'CLIENT' || role === 'MASTER' ? role : undefined,
+    });
 
-    user.ism = ism.trim();
-    user.familiya = familiya.trim();
-    user.fullName = `${user.ism} ${user.familiya}`;
-    user.username = ism.toLowerCase().replace(/[^a-z0-9]/g, '') || `master_${user.id.slice(-4)}`;
-    if (role === 'CLIENT' || role === 'MASTER') {
-      (user as any).role = role;
+    if (!updatedUser) {
+      res.status(404).json({ error: 'Foydalanuvchi topilmadi' });
+      return;
     }
 
     res.json({
       success: true,
-      message: 'Profil saqlandi',
-      user,
+      message: 'Profil muvaffaqiyatli saqlandi',
+      user: updatedUser,
     });
   } catch (error) {
-    res.status(500).json({ error: 'Profilni saqlashda xatolik' });
+    res.status(500).json({ error: 'Profilni saqlashda xatolik yuz berdi' });
   }
 });
 
-// GET /auth/me
-router.get('/me', async (req: Request, res: Response): Promise<void> => {
+// GET /auth/me (Protected: requires valid token, returns 401 if missing)
+router.get('/me', authenticateToken, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      res.json({ user: db.users[0] });
+    const user = req.currentUser;
+    if (!user) {
+      res.status(401).json({ error: "Avtorizatsiyadan o'tilmagan" });
       return;
     }
-
-    const token = authHeader.split(' ')[1];
-    try {
-      const decoded = jwt.verify(token, config.jwtSecret) as any;
-      const user = db.users.find((u) => u.id === decoded.userId) || db.users[0];
-      res.json({ user });
-    } catch (e) {
-      res.json({ user: db.users[0] });
-    }
+    res.json({ user });
   } catch (error) {
-    res.status(500).json({ error: 'Server error' });
+    res.status(500).json({ error: 'Server xatoligi yuz berdi' });
   }
 });
 

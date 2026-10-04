@@ -2,16 +2,20 @@ import webpush from 'web-push';
 import { db, PushSubscriptionItem } from './db';
 import { config } from './config';
 
-// Initialize VAPID
-const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || 'BM-8Mn8egdGXkKokUrxWVl5XabsOj-b3ZfHIQ-bb879jaiY6uGatyTcSUV5fu2-vE20kDGywC8ruGWno9kU-M1U';
-const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || 'Aswtv38VelVCli8rN15gu4H2QwFG96KVAjV2wl-WvPw';
+// Initialize VAPID strictly from environment variables
+const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || '';
+const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || '';
 const VAPID_SUBJECT = process.env.VAPID_SUBJECT || 'mailto:support@barbero.uz';
 
-try {
-  webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
-  console.log('[WebPush] VAPID configured successfully.');
-} catch (err) {
-  console.error('[WebPush] Error setting VAPID details:', err);
+if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
+  try {
+    webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
+    console.log('[WebPush] VAPID configured successfully.');
+  } catch (err) {
+    console.error('[WebPush] Error setting VAPID details:', err);
+  }
+} else {
+  console.warn('[WebPush] VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY are not set. Web Push disabled until configured.');
 }
 
 export interface PushPayload {

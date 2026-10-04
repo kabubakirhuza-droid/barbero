@@ -7,7 +7,6 @@ import {
   TouchableOpacity,
   Platform,
   ActivityIndicator,
-  Alert,
 } from 'react-native';
 import {
   ChevronLeft,
@@ -25,6 +24,7 @@ import { Button } from '../components/Button';
 import { api } from '../api/apiClient';
 import { APP_BASE_URL } from '../config/appConfig';
 import { Salon } from '../types';
+import { showToast } from '../utils/alerts';
 
 interface MySalonScreenProps {
   onBack: () => void;
@@ -70,7 +70,23 @@ export const MySalonScreen: React.FC<MySalonScreenProps> = ({ onBack }) => {
   }, []);
 
   const handleShare = () => {
-    Alert.alert('Ulashish', `Sartaroshxona manzili: ${salon?.address || ''}\n${APP_BASE_URL}/s/${salon?.id || ''}`);
+    const url = `${APP_BASE_URL}/s/${salon?.id || ''}`;
+    try {
+      if (typeof navigator !== 'undefined' && navigator.clipboard) {
+        navigator.clipboard.writeText(url);
+      }
+    } catch (e) {}
+    showToast(`Sartaroshxona havolasi nusxalandi: ${url}`, 'success');
+  };
+
+  const handleCopyMasterLink = (name: string) => {
+    const url = `${APP_BASE_URL}/b/${name.toLowerCase().replace(/\s+/g, '')}`;
+    try {
+      if (typeof navigator !== 'undefined' && navigator.clipboard) {
+        navigator.clipboard.writeText(url);
+      }
+    } catch (e) {}
+    showToast(`Usta havolasi nusxalandi: ${url}`, 'success');
   };
 
   return (
@@ -152,7 +168,7 @@ export const MySalonScreen: React.FC<MySalonScreenProps> = ({ onBack }) => {
                     </View>
                     <TouchableOpacity
                       style={styles.bookingLinkBtn}
-                      onPress={() => Alert.alert('Booking havola', `${APP_BASE_URL}/b/${m.name?.toLowerCase().replace(/\s+/g, '')}`)}
+                      onPress={() => handleCopyMasterLink(m.name)}
                       activeOpacity={0.7}
                     >
                       <ExternalLink size={16} color={colors.primary} />

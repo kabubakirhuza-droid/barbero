@@ -1,29 +1,38 @@
-import { Alert, Platform } from 'react-native';
+import {
+  triggerGlobalConfirm,
+  triggerGlobalAlert,
+  triggerGlobalToast,
+} from '../context/ModalToastContext';
 
 export const confirmAction = (
   title: string,
   message: string,
   onConfirm: () => void | Promise<void>,
   confirmText = 'Ha',
-  cancelText = "Yo'q"
+  cancelText = "Yo'q",
+  isDestructive = true
 ) => {
-  if (Platform.OS === 'web' && typeof window !== 'undefined') {
-    const ok = window.confirm(`${title}\n\n${message}`);
-    if (ok) {
-      onConfirm();
-    }
-  } else {
-    Alert.alert(title, message, [
-      { text: cancelText, style: 'cancel' },
-      { text: confirmText, style: 'destructive', onPress: onConfirm },
-    ]);
-  }
+  triggerGlobalConfirm({
+    title,
+    message,
+    confirmText,
+    cancelText,
+    isDestructive,
+    onConfirm,
+  });
 };
 
-export const showAlert = (title: string, message: string) => {
-  if (Platform.OS === 'web' && typeof window !== 'undefined') {
-    window.alert(`${title}\n\n${message}`);
-  } else {
-    Alert.alert(title, message);
-  }
+export const showAlert = (title: string, message: string, buttonText = 'Tushundim') => {
+  triggerGlobalAlert({
+    title,
+    message,
+    buttonText,
+  });
+};
+
+export const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
+  triggerGlobalToast({
+    message,
+    type,
+  });
 };

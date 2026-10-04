@@ -219,7 +219,6 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
       await api.registerProfile(
         nameToSave,
         surNameToSave,
-        fullPhoneE164,
         role
       ).catch(() => {});
 
@@ -230,13 +229,8 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
         detectAndSearchSalons();
       }
     } catch (err: any) {
-      console.warn('Verify code error, proceeding in test mode:', err);
-      if (role === 'CLIENT') {
-        onSuccess();
-      } else {
-        setStep('location');
-        detectAndSearchSalons();
-      }
+      console.warn('Verify code error:', err);
+      setErrorMessage(err.message || 'Tasdiqlash kodi noto‘g‘ri yoki muddati o‘tgan');
     } finally {
       setLoading(false);
     }
@@ -274,9 +268,13 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
         currentLng,
         SALON_MERGE_RADIUS_M
       );
-      setNearbySalons(data.salons || []);
-      if (data.salons && data.salons.length > 0) {
-        setSelectedSalonId(data.salons[0].id);
+      const mapped = (data.salons || []).map((s) => ({
+        ...s,
+        distanceMeters: (s as any).distanceMeters ?? 0,
+      }));
+      setNearbySalons(mapped);
+      if (mapped.length > 0) {
+        setSelectedSalonId(mapped[0].id);
       }
     } catch (err: any) {
       console.warn('Failed to fetch nearby salons:', err.message);
@@ -308,8 +306,8 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
       await api.createSalon({
         name,
         address: newSalonAddress,
-        lat: coords.lat,
-        lng: coords.lng,
+        latitude: coords.lat,
+        longitude: coords.lng,
       });
       onSuccess();
     } catch (err: any) {
@@ -545,18 +543,6 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
               Biz {getMaskedPhoneDisplay()} raqamingizga 6 xonali tasdiqlash kodini yubordik…
             </Text>
           </View>
-
-          {/* Quick 1-Tap Test Code Banner */}
-          <TouchableOpacity
-            style={styles.testCodeBanner}
-            onPress={() => handleCodeChange('111111')}
-            activeOpacity={0.8}
-          >
-            <Sparkles size={16} color={COLOR_PRIMARY} />
-            <Text style={styles.testCodeBannerText}>
-              Sinov kodi: <Text style={{ fontWeight: '800', color: COLOR_PRIMARY }}>111111</Text> (Kiritish uchun bosing)
-            </Text>
-          </TouchableOpacity>
 
           {/* Unified 6 Digit OTP Cells */}
           <TouchableOpacity

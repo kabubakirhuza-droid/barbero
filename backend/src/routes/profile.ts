@@ -1,58 +1,75 @@
-import { Router, Request, Response } from 'express';
+import { Router, Response } from 'express';
 import { db } from '../db';
 import { APP_BASE_URL } from '../config';
+import { authenticateToken, AuthRequest } from '../middleware/auth';
 
 const router = Router();
 
+// Protect all profile endpoints
+router.use(authenticateToken);
+
 // GET /profile
-router.get('/', (req: Request, res: Response) => {
-  const user = db.users[0];
+router.get('/', (req: AuthRequest, res: Response): void => {
+  const userId = req.user!.userId;
+  const user = db.getUserById(userId);
+
+  if (!user) {
+    res.status(404).json({ error: 'Foydalanuvchi topilmadi' });
+    return;
+  }
+
+  const settings = db.getUserSettings(userId);
+
   res.json({
     user,
-    bookingLink: `${APP_BASE_URL}/b/${user.username}`,
-    settings: db.userSettings,
+    bookingLink: `${APP_BASE_URL}/public/b/${user.username || user.id}`,
+    settings,
     appVersion: '1.0.9',
   });
 });
 
 // PUT /profile
-router.put('/', (req: Request, res: Response): void => {
-  const user = db.users[0];
-  if (req.body.fullName) user.fullName = req.body.fullName;
-  if (req.body.bio !== undefined) user.bio = req.body.bio;
-  if (req.body.avatarUrl) user.avatarUrl = req.body.avatarUrl;
-  res.json({ success: true, user });
+router.put('/', (req: AuthRequest, res: Response): void => {
+  const userId = req.user!.userId;
+  const updates: any = {};
+  if (req.body.fullName) updates.fullName = String(req.body.fullName).trim();
+  if (req.body.bio !== undefined) updates.bio = String(req.body.bio);
+  if (req.body.avatarUrl) updates.avatarUrl = String(req.body.avatarUrl);
+  if (req.body.username) updates.username = String(req.body.username).toLowerCase().replace(/[^a-z0-9_]/g, '');
+
+  const updated = db.updateUser(userId, updates);
+  res.json({ success: true, user: updated });
 });
 
 // GET /profile/working-hours
-router.get('/working-hours', (req: Request, res: Response) => {
-  res.json({ workingHours: db.workingHours });
+router.get('/working-hours', (req: AuthRequest, res: Response) => {
+  const userId = req.user!.userId;
+  const workingHours = db.getWorkingHours(userId);
+  res.json({ workingHours });
 });
 
 // PUT /profile/working-hours
-router.put('/working-hours', (req: Request, res: Response): void => {
+router.put('/working-hours', (req: AuthRequest, res: Response): void => {
+  const userId = req.user!.userId;
   const { workingHours } = req.body;
   if (Array.isArray(workingHours)) {
-    db.workingHours = workingHours;
+    db.updateWorkingHours(userId, workingHours);
   }
-  res.json({ success: true, workingHours: db.workingHours });
+  res.json({ success: true, workingHours: db.getWorkingHours(userId) });
 });
 
 // PUT /profile/settings
-router.put('/settings', (req: Request, res: Response): void => {
-  db.userSettings = {
-    ...db.userSettings,
-    ...req.body,
-  };
-  res.json({ success: true, settings: db.userSettings });
+router.put('/settings', (req: AuthRequest, res: Response): void => {
+  const userId = req.user!.userId;
+  const updated = db.updateUserSettings(userId, req.body);
+  res.json({ success: true, settings: updated });
 });
 
 // GET /profile/devices
-router.get('/devices', (req: Request, res: Response) => {
+router.get('/devices', (req: AuthRequest, res: Response) => {
   res.json({
     devices: [
-      { id: 'dev-1', deviceName: 'iPhone 15 Pro', os: 'iOS 18.0', location: 'Toshkent, UZ', isCurrent: true, lastActive: 'Hozir faol' },
-      { id: 'dev-2', deviceName: 'MacBook Pro 14"', os: 'macOS Sequoia', location: 'Toshkent, UZ', isCurrent: false, lastActive: '2 soat oldin' },
+      { id: 'dev-1', deviceName: 'Sizning qurilmangiz', os: 'Web / Mobile', location: 'Toshkent, UZ', isCurrent: true, lastActive: 'Hozir faol' },
     ],
   });
 });
