@@ -43,6 +43,7 @@ import { LanguageSelectScreen } from './LanguageSelectScreen';
 import { SecurityScreen } from './SecurityScreen';
 import { MySalonScreen } from './MySalonScreen';
 import { BookingRequestsScreen } from './BookingRequestsScreen';
+import { ServicesScreen } from './ServicesScreen';
 import { PublicBookingPreviewModal } from './PublicBookingPreviewModal';
 import { ReviewsListModal } from '../components/ReviewsListModal';
 import { InactiveClientsModal } from '../components/InactiveClientsModal';
@@ -58,6 +59,7 @@ interface ProfilScreenProps {
 
 type SubScreen =
   | null
+  | 'services'
   | 'bookingLink'
   | 'workingHours'
   | 'notifications'
@@ -126,6 +128,10 @@ export const ProfilScreen: React.FC<ProfilScreenProps> = ({ onLogout, onOpenAddS
   };
 
   // Render subscreen if active
+  if (activeSubScreen === 'services') {
+    return <ServicesScreen onBack={() => setActiveSubScreen(null)} />;
+  }
+
   if (activeSubScreen === 'bookingRequests') {
     return <BookingRequestsScreen onBack={() => setActiveSubScreen(null)} />;
   }
@@ -201,7 +207,7 @@ export const ProfilScreen: React.FC<ProfilScreenProps> = ({ onLogout, onOpenAddS
             {/* Xizmat turlari */}
             <TouchableOpacity
               style={styles.menuItem}
-              onPress={onOpenAddService}
+              onPress={() => setActiveSubScreen('services')}
               activeOpacity={0.7}
             >
               <View style={styles.menuItemLeft}>

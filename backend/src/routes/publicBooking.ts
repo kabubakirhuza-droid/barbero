@@ -63,7 +63,30 @@ router.get('/b/:username', async (req: Request, res: Response): Promise<void> =>
       return;
     }
 
-    const allServices = await db.getServices(master.id);
+    let allServices = await db.getServices(master.id);
+    if (!allServices || allServices.length === 0) {
+      const defaultStarterServices = [
+        { name: 'Soch olish', price: 50000, duration: 30, badgeColor: '#2563EB', isActive: true },
+        { name: 'Soch + soqol', price: 70000, duration: 45, badgeColor: '#2563EB', isActive: true },
+        { name: 'Bolalar sochi', price: 30000, duration: 25, badgeColor: '#10B981', isActive: true },
+        { name: 'Soqol olish', price: 30000, duration: 20, badgeColor: '#F59E0B', isActive: true },
+        { name: 'Kreativ soqol tekislash', price: 45000, duration: 30, badgeColor: '#8B5CF6', isActive: true },
+      ];
+      for (let i = 0; i < defaultStarterServices.length; i++) {
+        const item = defaultStarterServices[i];
+        await db.createService({
+          id: `srv-${Date.now()}-${i + 1}`,
+          userId: master.id,
+          name: item.name,
+          price: item.price,
+          duration: item.duration,
+          badgeColor: item.badgeColor,
+          isActive: item.isActive,
+        });
+      }
+      allServices = await db.getServices(master.id);
+    }
+
     const activeServices = allServices.filter((s) => s.isActive);
     const workingSchedule = await db.getWorkingHours(master.id);
     const photos = await db.getPortfolioPhotos(master.id);
