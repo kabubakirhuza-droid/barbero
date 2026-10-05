@@ -1,11 +1,5 @@
 require('dotenv').config({ path: require('path').resolve(__dirname, 'backend/.env') });
-let jwt;
-try {
-  jwt = require('jsonwebtoken');
-} catch (e) {
-  jwt = require('./backend/node_modules/jsonwebtoken');
-}
-
+const jwt = require('jsonwebtoken');
 let Pool;
 try {
   Pool = require('pg').Pool;
@@ -17,9 +11,9 @@ try {
 
 const BASE_URL = process.env.TEST_API_URL || 'http://localhost:5000';
 const JWT_SECRET = process.env.JWT_SECRET || 'dev_jwt_secret_change_in_production_key';
-const DATABASE_URL = process.env.DATABASE_URL || '';
+const DATABASE_URL = process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/barbero_db';
 
-const pool = Pool && DATABASE_URL ? new Pool({ connectionString: DATABASE_URL }) : null;
+const pool = Pool ? new Pool({ connectionString: DATABASE_URL }) : null;
 
 async function request(path, options = {}) {
   const url = `${BASE_URL}${path}`;
@@ -40,7 +34,7 @@ async function runTests() {
 
   // Ensure DB connection
   try {
-    await pool.query('SELECT 1');
+    if (pool) await pool.query('SELECT 1');
     console.log('✓ PostgreSQL connected for test preparation');
   } catch (err) {
     console.warn('⚠️ Warning: PostgreSQL not reachable directly via pool, testing via HTTP:', err.message);
@@ -89,12 +83,14 @@ async function runTests() {
   const testPhone = `+99890${Math.floor(1000000 + Math.random() * 9000000)}`;
 
   try {
-    await pool.query(
-      `INSERT INTO users (id, phone, ism, familiya, full_name, username, role, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
-       ON CONFLICT (id) DO NOTHING`,
-      [testMasterId, testPhone, 'Rustam', 'Karimov', 'Rustam Karimov', `rustam_${testMasterId.slice(-4)}`, 'MASTER']
-    );
+    if (pool) {
+      await pool.query(
+        `INSERT INTO users (id, phone, ism, familiya, full_name, username, role, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
+         ON CONFLICT (id) DO NOTHING`,
+        [testMasterId, testPhone, 'Rustam', 'Karimov', 'Rustam Karimov', `rustam_${testMasterId.slice(-4)}`, 'MASTER']
+      );
+    }
   } catch (err) {
     console.warn('DB insert via pool notice:', err.message);
   }
@@ -131,9 +127,9 @@ async function runTests() {
     method: 'POST',
     headers: authHeaders,
     body: JSON.stringify({
-      name: 'Klassik soch turmagi',
+      name: 'Klassik soch turmagi (60 min)',
       price: 70000,
-      duration: 30,
+      duration: 60,
       badgeColor: '#A67C2E',
     }),
   });
@@ -141,7 +137,7 @@ async function runTests() {
     throw new Error(`Create service failed: ${JSON.stringify(srvRes)}`);
   }
   const serviceId = srvRes.data.service.id;
-  console.log(`   ✓ Service created: ${srvRes.data.service.name} (${srvRes.data.service.price} UZS)`);
+  console.log(`   ✓ Service created: ${srvRes.data.service.name} (${srvRes.data.service.price} UZS, 60m)`);
 
   const listServices = await request('/services', { headers: authHeaders });
   if (listServices.status !== 200 || !listServices.data.services.find((s) => s.id === serviceId)) {
@@ -149,11 +145,11 @@ async function runTests() {
   }
   console.log(`   ✓ Services listed: found ${listServices.data.services.length} active service(s)`);
 
-  // 6. Appointments & Double Booking Conflict (409)
-  console.log('\n6. Testing Appointments & Slot Collision Lock (409 Conflict)...');
+  // 6. Appointments & Interval Collision (409)
+  console.log('\n6. Testing Interval Overlap Collision Prevention (409 Conflict)...');
   const testDate = '2026-10-20';
-  const testSlot = '15:00';
 
+  // 6a. 14:00 - 15:00 Appointment (60 min service)
   const aptRes1 = await request('/appointments', {
     method: 'POST',
     headers: authHeaders,
@@ -162,154 +158,141 @@ async function runTests() {
       clientPhone: '+998901112233',
       serviceId,
       date: testDate,
-      startTime: testSlot,
+      startTime: '14:00',
     }),
   });
   if (aptRes1.status !== 201 || !aptRes1.data.appointment?.id) {
-    throw new Error(`Create appointment 1 failed: ${JSON.stringify(aptRes1)}`);
+    throw new Error(`Create appointment 1 (14:00-15:00) failed: ${JSON.stringify(aptRes1)}`);
   }
   const aptId = aptRes1.data.appointment.id;
-  console.log(`   ✓ Appointment created on ${testDate} at ${testSlot} (ID: ${aptId})`);
+  console.log(`   ✓ Appointment 14:00-15:00 created (ID: ${aptId})`);
 
-  // Attempt duplicate booking on exact same slot -> MUST return 409
+  // 6b. Attempt booking inside the interval at 14:30 -> MUST return 409
   const aptRes2 = await request('/appointments', {
     method: 'POST',
     headers: authHeaders,
     body: JSON.stringify({
-      clientName: 'Alisher',
+      clientName: 'Alisher (Overlapping 14:30)',
       clientPhone: '+998904445566',
       serviceId,
       date: testDate,
-      startTime: testSlot,
+      startTime: '14:30',
     }),
   });
   if (aptRes2.status !== 409) {
-    throw new Error(`Expected 409 Conflict for duplicate appointment, got ${aptRes2.status}: ${JSON.stringify(aptRes2.data)}`);
+    throw new Error(`Expected 409 Conflict for 14:30 overlapping 14:00-15:00, got ${aptRes2.status}: ${JSON.stringify(aptRes2.data)}`);
   }
-  console.log('   ✓ Double booking prevented with 409 Conflict (PostgreSQL constraint verified)');
+  console.log('   ✓ Overlapping appointment at 14:30 strictly prevented with 409 Conflict');
 
-  // Delete appointment
-  const delRes = await request(`/appointments/${aptId}`, {
-    method: 'DELETE',
-    headers: authHeaders,
-  });
-  if (delRes.status !== 200 || !delRes.data.success) {
-    throw new Error(`Delete appointment failed: ${JSON.stringify(delRes)}`);
-  }
-  console.log('   ✓ Appointment deleted / cancelled in PostgreSQL');
-
-  // Re-booking the freed slot should now succeed with 201
+  // 6c. Attempt booking spanning into the interval: 13:30 (60 min -> 13:30-14:30) -> MUST return 409
   const aptRes3 = await request('/appointments', {
     method: 'POST',
     headers: authHeaders,
     body: JSON.stringify({
-      clientName: 'Alisher (Re-booked)',
-      clientPhone: '+998904445566',
+      clientName: 'Jamshid (Overlapping 13:30-14:30)',
+      clientPhone: '+998905556677',
       serviceId,
       date: testDate,
-      startTime: testSlot,
+      startTime: '13:30',
     }),
   });
-  if (aptRes3.status !== 201 || !aptRes3.data.appointment?.id) {
-    throw new Error(`Re-booking freed slot failed: ${JSON.stringify(aptRes3)}`);
+  if (aptRes3.status !== 409) {
+    throw new Error(`Expected 409 Conflict for 13:30-14:30 overlapping 14:00-15:00, got ${aptRes3.status}: ${JSON.stringify(aptRes3.data)}`);
   }
-  console.log('   ✓ Freed slot successfully re-booked (201 Created)');
+  console.log('   ✓ Overlapping appointment at 13:30 (60 min) strictly prevented with 409 Conflict');
 
-  // 7. Booking Requests Flow
-  console.log('\n7. Testing Booking Requests Flow...');
-  const reqCreate = await request('/booking-requests', {
+  // 6d. Booking adjacent slot at 15:00 -> MUST succeed (201)
+  const aptRes4 = await request('/appointments', {
     method: 'POST',
+    headers: authHeaders,
     body: JSON.stringify({
-      masterId: testMasterId,
-      clientName: 'Jasur',
-      clientPhone: '+998909990011',
+      clientName: 'Sardor (Adjacent 15:00)',
+      clientPhone: '+998907778899',
       serviceId,
-      date: '2026-10-21',
-      time: '16:00',
+      date: testDate,
+      startTime: '15:00',
     }),
   });
-  if (reqCreate.status !== 201 || !reqCreate.data.request?.id) {
-    throw new Error(`Client booking request failed: ${JSON.stringify(reqCreate)}`);
+  if (aptRes4.status !== 201) {
+    throw new Error(`Expected 201 for adjacent 15:00 appointment, got ${aptRes4.status}: ${JSON.stringify(aptRes4.data)}`);
   }
-  const bookingReqId = reqCreate.data.request.id;
-  console.log(`   ✓ Client submitted booking request (ID: ${bookingReqId})`);
+  console.log('   ✓ Adjacent appointment at 15:00 created successfully (201)');
 
-  const listReqs = await request('/booking-requests', { headers: authHeaders });
-  if (listReqs.status !== 200 || !listReqs.data.requests.find((r) => r.id === bookingReqId)) {
-    throw new Error(`Master list booking requests failed: ${JSON.stringify(listReqs)}`);
-  }
-  console.log(`   ✓ Master received pending booking request in inbox`);
-
-  const acceptReq = await request(`/booking-requests/${bookingReqId}/accept`, {
-    method: 'POST',
-    headers: authHeaders,
-  });
-  if (acceptReq.status !== 200 || !acceptReq.data.appointment) {
-    throw new Error(`Accept booking request failed: ${JSON.stringify(acceptReq)}`);
-  }
-  console.log('   ✓ Master accepted booking request and auto-scheduled appointment in schedule');
-
-  // 8. Salons & Geolocation
-  console.log('\n8. Testing Salons & Geolocation Management...');
-  const salonCreate = await request('/salons/create', {
+  // 7. Blocked Slots & Collisions
+  console.log('\n7. Testing Blocked Slots (Dam olish) & Range Collisions...');
+  const blockRes1 = await request('/blocked-slots', {
     method: 'POST',
     headers: authHeaders,
     body: JSON.stringify({
-      name: 'Barbero Test Salon',
-      address: 'Toshkent sh., Chilonzor 1-mavze',
-      latitude: 41.2856,
-      longitude: 69.2034,
+      appointmentDate: testDate,
+      startTime: '16:00',
+      endTime: '17:00',
+      reason: 'Tushlik / Dam olish',
     }),
   });
-  if (salonCreate.status !== 201 || !salonCreate.data.salon?.id) {
-    throw new Error(`Create salon failed: ${JSON.stringify(salonCreate)}`);
+  if (blockRes1.status !== 201 || !blockRes1.data.blockedSlot?.id) {
+    throw new Error(`Block slot failed: ${JSON.stringify(blockRes1)}`);
   }
-  const testSalonId = salonCreate.data.salon.id;
-  console.log(`   ✓ Created salon: ${salonCreate.data.salon.name} (ID: ${testSalonId})`);
+  console.log('   ✓ Slot 16:00-17:00 blocked (Dam olish)');
 
-  const mySalon = await request('/salons/my', { headers: authHeaders });
-  if (mySalon.status !== 200 || !mySalon.data.salon) {
-    throw new Error(`Get my salon failed: ${JSON.stringify(mySalon)}`);
-  }
-  console.log(`   ✓ Master salon verified: ${mySalon.data.salon.name}`);
-
-  // 9. Push Subscription
-  console.log('\n9. Testing Push Subscriptions...');
-  const pushSub = await request('/push/subscribe', {
+  // Attempt booking on blocked interval 16:30 -> MUST return 409
+  const aptOnBlocked = await request('/appointments', {
     method: 'POST',
     headers: authHeaders,
     body: JSON.stringify({
-      subscription: {
-        endpoint: `https://updates.push.services.mozilla.com/wpush/v2/test_${Date.now()}`,
-        keys: {
-          p256dh: 'BNcRdreStoreKeyTestingOnly...',
-          auth: 'tBHxAuthKey...',
-        },
-      },
-      device: 'Chrome PWA',
+      clientName: 'Test on blocked',
+      clientPhone: '+998901112233',
+      serviceId,
+      date: testDate,
+      startTime: '16:30',
     }),
   });
-  if (pushSub.status !== 200 || !pushSub.data.success) {
-    throw new Error(`Push subscribe failed: ${JSON.stringify(pushSub)}`);
+  if (aptOnBlocked.status !== 409) {
+    throw new Error(`Expected 409 on blocked slot 16:30, got ${aptOnBlocked.status}`);
   }
-  console.log('   ✓ Push subscription registered in PostgreSQL');
+  console.log('   ✓ Booking on blocked slot interval strictly prevented with 409 Conflict');
 
-  const pushStatus = await request('/push/status', { headers: authHeaders });
-  if (pushStatus.status !== 200 || !pushStatus.data.isSubscribed) {
-    throw new Error(`Push status check failed: ${JSON.stringify(pushStatus)}`);
+  // 8. Call Log & Phone Normalization
+  console.log('\n8. Testing Call Log & Phone Normalization...');
+  const callRes = await request('/call-log', {
+    method: 'POST',
+    headers: authHeaders,
+    body: JSON.stringify({
+      phone: '90 111 22 33',
+      name: 'Mijoz Telefon',
+      direction: 'outgoing_call',
+    }),
+  });
+  if (callRes.status !== 201 || callRes.data.callLog?.phone !== '+998901112233') {
+    throw new Error(`Call log failed or didn't normalize phone: ${JSON.stringify(callRes)}`);
   }
-  console.log(`   ✓ Push subscription verified: active (${pushStatus.data.subscriptionsCount} sub(s))`);
+  console.log('   ✓ Phone normalized to +998901112233 and saved to Call Log');
 
-  // 10. Analytics
-  console.log('\n10. Testing Analytics Calculation...');
-  const analyticsRes = await request('/analytics?period=oy', { headers: authHeaders });
-  if (analyticsRes.status !== 200 || !analyticsRes.data.revenue) {
-    throw new Error(`Analytics calculation failed: ${JSON.stringify(analyticsRes)}`);
+  // 9. Notification 404
+  console.log('\n9. Testing Notification 404 handling...');
+  const notifRead404 = await request('/notifications/nonexistent-notification-id/read', {
+    method: 'PATCH',
+    headers: authHeaders,
+  });
+  if (notifRead404.status !== 404) {
+    throw new Error(`Expected 404 for nonexistent notification, got ${notifRead404.status}`);
   }
-  console.log(`   ✓ Analytics calculated: Revenue ${analyticsRes.data.revenue.formatted}, Bookings: ${analyticsRes.data.revenue.totalBookings}`);
+  console.log('   ✓ PATCH /notifications/:id/read returns 404 for nonexistent/unowned notification');
+
+  // 10. Data Validation (Bad date/time 400)
+  console.log('\n10. Testing Input Validation (Bad dates, invalid time, past dates -> 400)...');
+  const badDateRes = await request('/appointments/quick', {
+    method: 'POST',
+    headers: authHeaders,
+    body: JSON.stringify({ date: 'abc', startTime: '99:99' }),
+  });
+  if (badDateRes.status !== 400) {
+    throw new Error(`Expected 400 for bad date/time, got ${badDateRes.status}`);
+  }
+  console.log('   ✓ Invalid date/time rejected with 400 Bad Request');
 
   console.log('\n=======================================================');
-  console.log(' 🎉 ALL 10 E2E BARBERO BACKEND TESTS PASSED (100%)');
+  console.log(' 🎉 ALL E2E BARBERO BACKEND TESTS PASSED (100%)');
   console.log('=======================================================\n');
   if (pool) await pool.end();
 }

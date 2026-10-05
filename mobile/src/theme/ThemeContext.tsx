@@ -1,13 +1,15 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { useColorScheme } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { COLOR_PRIMARY, COLOR_DANGER } from './theme';
+import { COLOR_PRIMARY, COLOR_DANGER, COLOR_SUCCESS, COLOR_SECONDARY } from './theme';
 
 export type ThemeMode = 'light' | 'dark' | 'system';
 
 export interface ThemeColors {
   background: string;
   card: string;
+  surface: string;
+  surfaceSecondary: string;
   cardBorder: string;
   cardBorderSubtle: string;
   inputBackground: string;
@@ -17,6 +19,9 @@ export interface ThemeColors {
   primaryPill: string;
   primaryDark: string;
   primaryHover: string;
+  secondary: string;
+  success: string;
+  successLight: string;
   danger: string;
   dangerLight: string;
   dangerHover: string;
@@ -32,9 +37,11 @@ export interface ThemeColors {
 }
 
 const lightColors: ThemeColors = {
-  background: '#F8FAFC',
+  background: '#F7F8FA',
   card: '#FFFFFF',
-  cardBorder: '#E2E8F0',
+  surface: '#FFFFFF',
+  surfaceSecondary: '#F1F5F9',
+  cardBorder: '#E5E7EB',
   cardBorderSubtle: '#F1F5F9',
   inputBackground: '#F1F5F9',
   primary: COLOR_PRIMARY,
@@ -43,12 +50,15 @@ const lightColors: ThemeColors = {
   primaryPill: '#DBEAFE',
   primaryDark: '#1D4ED8',
   primaryHover: '#3B82F6',
+  secondary: COLOR_SECONDARY,
+  success: COLOR_SUCCESS,
+  successLight: '#DCFCE7',
   danger: COLOR_DANGER,
   dangerLight: '#FEE2E2',
   dangerHover: '#DC2626',
-  textPrimary: '#0F172A',
+  textPrimary: '#111827',
   textSecondary: '#475569',
-  textMuted: '#94A3B8',
+  textMuted: '#6B7280',
   textLight: '#FFFFFF',
   skeleton: '#E2E8F0',
   skeletonHighlight: '#F1F5F9',
@@ -60,6 +70,8 @@ const lightColors: ThemeColors = {
 const darkColors: ThemeColors = {
   background: '#090D16',
   card: '#111827',
+  surface: '#111827',
+  surfaceSecondary: '#1A2234',
   cardBorder: '#1F2937',
   cardBorderSubtle: '#162032',
   inputBackground: '#1A2234',
@@ -69,6 +81,9 @@ const darkColors: ThemeColors = {
   primaryPill: '#1E3A8A',
   primaryDark: '#1D4ED8',
   primaryHover: '#60A5FA',
+  secondary: '#94A3B8',
+  success: '#10B981',
+  successLight: '#064E3B',
   danger: '#EF4444',
   dangerLight: '#3B1818',
   dangerHover: '#DC2626',

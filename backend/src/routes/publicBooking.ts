@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { db, Appointment } from '../db';
+import { db, Appointment, addMinutesToTime, getTashkentNow } from '../db';
 
 const router = Router();
 
@@ -41,7 +41,7 @@ function checkRateLimit(ip: string, phone: string): { allowed: boolean; message?
 }
 
 // Helper to normalize and validate Uzbekistan phone
-function normalizePhone(raw: string): string {
+export function normalizePhone(raw: string): string {
   let digits = String(raw || '').replace(/\D/g, '');
   if (digits.length === 9) {
     digits = `998${digits}`;
@@ -117,7 +117,7 @@ router.get('/b/:username', async (req: Request, res: Response): Promise<void> =>
   }
 });
 
-// GET /public/b/:username/available-slots?date=YYYY-MM-DD
+// GET /public/b/:username/available-slots?date=YYYY-MM-DD&duration=30
 router.get('/b/:username/available-slots', async (req: Request, res: Response): Promise<void> => {
   try {
     const { username } = req.params;
@@ -131,10 +131,12 @@ router.get('/b/:username/available-slots', async (req: Request, res: Response): 
       return;
     }
 
-    const { date } = req.query;
-    const targetDate = (date as string) || new Date().toISOString().split('T')[0];
+    const { date, duration: reqDuration } = req.query;
+    const { dateStr: todayStr, timeStr: nowTimeStr } = getTashkentNow();
+    const targetDate = (date as string) || todayStr;
+    const duration = Math.max(15, Math.min(180, Number(reqDuration) || 30));
 
-    // Base slots
+    // Base working slots (09:00 - 21:00)
     const baseSlots = [
       '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
       '12:00', '12:30', '14:00', '14:30', '15:00', '15:30',
@@ -143,19 +145,34 @@ router.get('/b/:username/available-slots', async (req: Request, res: Response): 
     ];
 
     const appointments = await db.getAppointments(master.id, targetDate);
-    // Find occupied slots for this date and master
-    const occupiedSlots = new Set(
-      appointments
-        .filter((a) => a.status !== 'cancelled')
-        .map((a) => a.startTime)
-    );
+    const activeAppts = appointments.filter((a) => a.status !== 'cancelled');
+    const blockedSlots = await db.getBlockedSlots(master.id, targetDate);
 
-    const slots = baseSlots.map((time) => ({
-      time,
-      isAvailable: !occupiedSlots.has(time),
-    }));
+    const slots = baseSlots.map((time) => {
+      const slotStart = time;
+      const slotEnd = addMinutesToTime(slotStart, duration);
 
-    res.json({ date: targetDate, slots });
+      // Check if slot is in the past
+      if (targetDate < todayStr || (targetDate === todayStr && slotStart < nowTimeStr)) {
+        return { time, isAvailable: false };
+      }
+
+      // Check interval collision with appointments [start, end)
+      const aptOverlap = activeAppts.some((a) => a.startTime < slotEnd && a.endTime > slotStart);
+      if (aptOverlap) {
+        return { time, isAvailable: false };
+      }
+
+      // Check interval collision with blocked slots [start, end)
+      const blkOverlap = blockedSlots.some((b) => b.startTime < slotEnd && b.endTime > slotStart);
+      if (blkOverlap) {
+        return { time, isAvailable: false };
+      }
+
+      return { time, isAvailable: true };
+    });
+
+    res.json({ date: targetDate, duration, slots });
   } catch (error) {
     console.error('[PublicBooking slots GET error]:', error);
     res.status(500).json({ error: 'Boʻsh vaqtlarni yuklashda xatolik yuz berdi' });
@@ -204,43 +221,42 @@ router.post('/b/:username/book', async (req: Request, res: Response): Promise<vo
       return;
     }
 
-    const todayStr = new Date().toISOString().split('T')[0];
-    if (date < todayStr) {
-      res.status(400).json({ error: "O'tib ketgan sanaga yozilish mumkin emas" });
-      return;
-    }
-
     // Strict time format (HH:MM)
     if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(startTime)) {
       res.status(400).json({ error: "Vaqt formati noto'g'ri (HH:MM)" });
       return;
     }
 
-    // Verify service belongs to this master
+    const { dateStr: todayStr, timeStr: nowTimeStr } = getTashkentNow();
+    if (date < todayStr || (date === todayStr && startTime < nowTimeStr)) {
+      res.status(400).json({ error: "O'tib ketgan sanaga yozilish mumkin emas" });
+      return;
+    }
+
+    // Verify service belongs to this master and resolve authoritative duration & price
     const service = await db.getServiceById(serviceId);
     if (!service || service.userId !== master.id) {
       res.status(404).json({ error: "Tanlangan xizmat ushbu ustaga tegishli emas yoki topilmadi" });
       return;
     }
 
-    // Check if slot is already occupied
-    if (await db.hasActiveSlotConflict(master.id, date, startTime)) {
+    const duration = service.duration || 30;
+    const endTime = addMinutesToTime(startTime, duration);
+
+    // Check if slot interval is already occupied
+    if (await db.hasActiveSlotConflict(master.id, date, startTime, endTime)) {
       res.status(409).json({ error: 'Bu vaqt oralig‘i allaqachon band qilingan' });
       return;
     }
 
-    const client = await db.createOrUpdateClient(master.id, String(clientName).trim(), normalizedPhone, service.price);
-
-    // Calculate endTime
-    const [h, m] = startTime.split(':').map(Number);
-    const totalM = (h || 0) * 60 + (m || 0) + (service.duration || 30);
-    const endTime = `${String(Math.floor(totalM / 60) % 24).padStart(2, '0')}:${String(totalM % 60).padStart(2, '0')}`;
+    const cleanClientName = String(clientName).trim().slice(0, 100);
+    const client = await db.createOrUpdateClient(master.id, cleanClientName, normalizedPhone, service.price);
 
     const newAppointment: Appointment = {
       id: `apt-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
       userId: master.id,
       clientId: client.id,
-      clientName: String(clientName).trim(),
+      clientName: cleanClientName,
       clientPhone: normalizedPhone,
       serviceId: service.id,
       serviceName: service.name,
@@ -249,7 +265,7 @@ router.post('/b/:username/book', async (req: Request, res: Response): Promise<vo
       date,
       startTime,
       endTime,
-      duration: service.duration || 30,
+      duration,
       status: 'confirmed',
     };
 
@@ -271,4 +287,3 @@ router.post('/b/:username/book', async (req: Request, res: Response): Promise<vo
 });
 
 export default router;
-

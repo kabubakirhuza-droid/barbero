@@ -9,6 +9,7 @@ export interface User {
   ism?: string;
   familiya?: string;
   fullName: string;
+  name?: string;
   username: string;
   avatarUrl?: string;
   bio?: string;
@@ -202,6 +203,7 @@ export interface BookingRequest {
   date: string;
   time: string;
   duration?: number;
-  status: 'pending' | 'accepted' | 'rejected' | 'expired';
+  status: 'new' | 'pending' | 'accepted' | 'rejected' | 'expired';
+  expiresAt?: string;
   createdAt?: string;
 }

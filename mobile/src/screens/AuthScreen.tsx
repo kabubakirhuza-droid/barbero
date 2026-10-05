@@ -10,6 +10,7 @@ import {
   ScrollView,
   ActivityIndicator,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   X,
   ChevronLeft,
@@ -594,29 +595,6 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
               })}
             </View>
           </TouchableOpacity>
-
-          {/* Quick Test Code Fill */}
-          <View style={{ alignItems: 'center', marginTop: 12 }}>
-            <TouchableOpacity
-              onPress={() => {
-                setCodeValue('111111');
-                handleVerifyCode('111111');
-              }}
-              style={{
-                backgroundColor: 'rgba(37, 99, 235, 0.08)',
-                paddingVertical: 6,
-                paddingHorizontal: 12,
-                borderRadius: 8,
-                borderWidth: 1,
-                borderColor: 'rgba(37, 99, 235, 0.2)',
-              }}
-              activeOpacity={0.7}
-            >
-              <Text style={{ fontSize: 13, color: COLOR_PRIMARY, fontWeight: '600' }}>
-                ⚡ Test kodi: 111111 (Kirish uchun bosing)
-              </Text>
-            </TouchableOpacity>
-          </View>
 
           {errorMessage ? (
             <Text style={styles.errorText}>{errorMessage}</Text>

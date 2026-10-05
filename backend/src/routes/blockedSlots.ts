@@ -1,11 +1,20 @@
 import { Router, Response } from 'express';
-import { db } from '../db';
+import { db, addMinutesToTime } from '../db';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 
 const router = Router();
 
 // Require auth on blocked-slots routes
 router.use(authenticateToken);
+
+// Validation helpers
+function isValidDate(str: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(String(str || ''));
+}
+
+function isValidTime(str: string): boolean {
+  return /^([01]\d|2[0-3]):[0-5]\d$/.test(String(str || ''));
+}
 
 // GET /blocked-slots?date=YYYY-MM-DD
 router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
@@ -37,10 +46,30 @@ router.post('/', async (req: AuthRequest, res: Response): Promise<void> => {
       return;
     }
 
-    // Check if slot has active appointment
-    const hasConflict = await db.hasActiveSlotConflict(userId, appointmentDate, startTime);
+    if (!isValidDate(appointmentDate)) {
+      res.status(400).json({ error: "Sana formati noto'g'ri (YYYY-MM-DD)" });
+      return;
+    }
+
+    if (!isValidTime(startTime)) {
+      res.status(400).json({ error: "Boshlanish vaqti formati noto'g'ri (HH:MM)" });
+      return;
+    }
+
+    let finalEndTime = endTime;
+    if (!finalEndTime || finalEndTime <= startTime) {
+      finalEndTime = addMinutesToTime(startTime, 30);
+    }
+
+    if (!isValidTime(finalEndTime)) {
+      res.status(400).json({ error: "Tugash vaqti formati noto'g'ri (HH:MM)" });
+      return;
+    }
+
+    // Check if slot interval conflicts with any active appointment or blocked slot
+    const hasConflict = await db.hasActiveSlotConflict(userId, appointmentDate, startTime, finalEndTime);
     if (hasConflict) {
-      res.status(409).json({ error: "Ushbu vaqtda allaqachon yozuv yoki dam olish mavjud" });
+      res.status(409).json({ error: "Ushbu vaqt oralig'ida allaqachon yozuv yoki dam olish mavjud" });
       return;
     }
 
@@ -48,8 +77,8 @@ router.post('/', async (req: AuthRequest, res: Response): Promise<void> => {
       userId,
       appointmentDate,
       startTime,
-      endTime: endTime || startTime,
-      reason: reason || 'Dam olish',
+      endTime: finalEndTime,
+      reason: reason ? String(reason).trim().slice(0, 100) : 'Dam olish',
     });
 
     res.status(201).json({

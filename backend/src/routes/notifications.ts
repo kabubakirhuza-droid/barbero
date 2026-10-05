@@ -32,7 +32,11 @@ router.patch('/:id/read', async (req: AuthRequest, res: Response): Promise<void>
     const userId = req.user!.userId;
     const { id } = req.params;
 
-    await db.markNotificationRead(id, userId);
+    const updated = await db.markNotificationRead(id, userId);
+    if (!updated) {
+      res.status(404).json({ error: 'Bildirishnoma topilmadi' });
+      return;
+    }
 
     res.json({
       success: true,

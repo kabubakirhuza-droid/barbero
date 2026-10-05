@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { db, BookingRequest, Appointment } from '../db';
+import { db, BookingRequest, Appointment, addMinutesToTime, getTashkentNow } from '../db';
 import { pushService } from '../pushService';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { config } from '../config';
@@ -11,7 +11,7 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response): Prom
   try {
     const masterId = req.user!.userId;
 
-    // Check & expire stale pending requests automatically on every query (Section 1 & 9)
+    // Check & expire stale pending requests automatically on every query
     await db.expirePendingBookingRequests(config.requestTtlMinutes || 30);
 
     const requests = await db.getBookingRequests(masterId);
@@ -67,13 +67,13 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    const trimmedName = String(clientName).trim();
+    const trimmedName = String(clientName).trim().slice(0, 100);
     if (trimmedName.length < 2) {
       res.status(400).json({ error: "Mijoz ismi kamida 2 ta harfdan iborat bo'lishi kerak" });
       return;
     }
 
-    // Phone validation
+    // Phone validation (+998XXXXXXXXX)
     let cleanPhone = String(clientPhone).replace(/\D/g, '');
     if (cleanPhone.length === 9) cleanPhone = `998${cleanPhone}`;
     if (!/^998\d{9}$/.test(cleanPhone)) {
@@ -87,20 +87,16 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       res.status(400).json({ error: "Sana formati noto'g'ri (YYYY-MM-DD)" });
       return;
     }
-    const today = new Date().toISOString().split('T')[0];
-    if (String(date) < today) {
-      res.status(400).json({ error: "O'tgan sanaga yozilish mumkin emas" });
-      return;
-    }
 
     // Time validation
-    if (!/^\d{2}:\d{2}$/.test(String(time))) {
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(String(time))) {
       res.status(400).json({ error: "Vaqt formati noto'g'ri (HH:MM)" });
       return;
     }
-    const [hours, mins] = String(time).split(':').map(Number);
-    if (hours < 7 || hours > 23 || mins < 0 || mins > 59) {
-      res.status(400).json({ error: "Kiritilgan vaqt ish vaqtidan tashqarida (07:00 - 23:00)" });
+
+    const { dateStr: todayStr, timeStr: nowTimeStr } = getTashkentNow();
+    if (String(date) < todayStr || (String(date) === todayStr && String(time) < nowTimeStr)) {
+      res.status(400).json({ error: "O'tib ketgan sanaga yozilish mumkin emas" });
       return;
     }
 
@@ -128,8 +124,11 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    // Check slot availability
-    if (await db.hasActiveSlotConflict(master.id, String(date), String(time))) {
+    const duration = service.duration || 30;
+    const endTime = addMinutesToTime(String(time), duration);
+
+    // Check slot availability with interval overlap
+    if (await db.hasActiveSlotConflict(master.id, String(date), String(time), endTime)) {
       res.status(409).json({ error: "Ushbu vaqt oralig'ida allaqachon boshqa qabul mavjud" });
       return;
     }
@@ -145,7 +144,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       badgeColor: service.badgeColor || '#2563EB',
       date: String(date),
       time: String(time),
-      duration: service.duration || 30,
+      duration,
       status: 'pending',
     };
 
@@ -200,18 +199,16 @@ router.post('/:id/accept', authenticateToken, async (req: AuthRequest, res: Resp
       return;
     }
 
-    // Check double booking
-    if (await db.hasActiveSlotConflict(masterId, request.date, request.time)) {
+    const duration = request.duration || 30;
+    const endTime = addMinutesToTime(request.time, duration);
+
+    // Check interval conflict
+    if (await db.hasActiveSlotConflict(masterId, request.date, request.time, endTime)) {
       res.status(409).json({ error: "Ushbu vaqt oralig'ida allaqachon boshqa qabul mavjud" });
       return;
     }
 
     await db.updateBookingRequestStatus(id, 'accepted');
-
-    // Calculate end time
-    const [h, m] = request.time.split(':').map(Number);
-    const totalM = (h || 9) * 60 + (m || 0) + (request.duration || 30);
-    const endTime = `${String(Math.floor(totalM / 60) % 24).padStart(2, '0')}:${String(totalM % 60).padStart(2, '0')}`;
 
     const client = await db.createOrUpdateClient(masterId, request.clientName, request.clientPhone, request.servicePrice);
 
@@ -228,7 +225,7 @@ router.post('/:id/accept', authenticateToken, async (req: AuthRequest, res: Resp
       date: request.date,
       startTime: request.time,
       endTime,
-      duration: request.duration || 30,
+      duration,
       status: 'confirmed',
     };
 

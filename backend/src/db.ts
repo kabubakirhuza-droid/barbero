@@ -206,10 +206,46 @@ pool.on('error', (err) => {
   console.error('[PostgreSQL] Unexpected error on idle client:', err);
 });
 
+export function addMinutesToTime(timeStr: string, minutes: number): string {
+  const [h, m] = String(timeStr || '00:00').split(':').map(Number);
+  const total = (h || 0) * 60 + (m || 0) + minutes;
+  const endHours = Math.floor(total / 60) % 24;
+  const endMins = total % 60;
+  return `${String(endHours).padStart(2, '0')}:${String(endMins).padStart(2, '0')}`;
+}
+
+export function getTashkentNow(): { dateStr: string; timeStr: string } {
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Tashkent',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+  const parts = formatter.formatToParts(new Date());
+  const year = parts.find((p) => p.type === 'year')?.value || '2026';
+  const month = parts.find((p) => p.type === 'month')?.value || '01';
+  const day = parts.find((p) => p.type === 'day')?.value || '01';
+  const hour = parts.find((p) => p.type === 'hour')?.value || '00';
+  const minute = parts.find((p) => p.type === 'minute')?.value || '00';
+  return {
+    dateStr: `${year}-${month}-${day}`,
+    timeStr: `${hour}:${minute}`,
+  };
+}
+
 export class Database {
   private isInitialized = false;
+  private initError: Error | null = null;
 
   public async query(text: string, params?: any[]): Promise<any> {
+    if (this.initError) {
+      const err: any = new Error(`Database initialization failed: ${this.initError.message}`);
+      err.status = 503;
+      throw err;
+    }
     if (!config.databaseUrl && isProduction) {
       const err: any = new Error('DATABASE_URL is not configured in production');
       err.status = 503;
@@ -221,215 +257,204 @@ export class Database {
   public async initDb(): Promise<void> {
     if (this.isInitialized) return;
     try {
-      const possiblePaths = [
-        path.join(__dirname, 'schema.sql'),
-        path.join(__dirname, '../src/schema.sql'),
-        path.join(process.cwd(), 'src/schema.sql'),
-        path.join(process.cwd(), 'backend/src/schema.sql'),
-      ];
-      const schemaPath = possiblePaths.find((p) => fs.existsSync(p));
-      let schemaSql = '';
-      if (schemaPath) {
-        schemaSql = fs.readFileSync(schemaPath, 'utf8');
-      } else {
-        schemaSql = `
-          CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-          CREATE TABLE IF NOT EXISTS users (
-            id VARCHAR(64) PRIMARY KEY,
-            phone VARCHAR(20) NOT NULL UNIQUE,
-            ism VARCHAR(60) DEFAULT 'Master',
-            familiya VARCHAR(60) DEFAULT 'Barbero',
-            full_name VARCHAR(120) DEFAULT 'Barbero Master',
-            username VARCHAR(50) UNIQUE,
-            avatar_url TEXT,
-            bio TEXT,
-            role VARCHAR(20) DEFAULT 'MASTER',
-            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-            updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-          );
-          CREATE TABLE IF NOT EXISTS otp_requests (
-            phone VARCHAR(20) PRIMARY KEY,
-            request_id VARCHAR(100) NOT NULL,
-            attempts INTEGER DEFAULT 0,
-            last_sent_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-          );
-          CREATE TABLE IF NOT EXISTS salons (
-            id VARCHAR(64) PRIMARY KEY,
-            name VARCHAR(150) NOT NULL,
-            address TEXT NOT NULL,
-            latitude DOUBLE PRECISION NOT NULL,
-            longitude DOUBLE PRECISION NOT NULL,
-            created_by VARCHAR(64) REFERENCES users(id) ON DELETE SET NULL,
-            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-          );
-          CREATE TABLE IF NOT EXISTS salon_members (
-            id VARCHAR(64) PRIMARY KEY,
-            salon_id VARCHAR(64) REFERENCES salons(id) ON DELETE CASCADE,
-            master_id VARCHAR(64) REFERENCES users(id) ON DELETE CASCADE,
-            role VARCHAR(20) DEFAULT 'member',
-            joined_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-            UNIQUE(salon_id, master_id)
-          );
-          CREATE TABLE IF NOT EXISTS services (
-            id VARCHAR(64) PRIMARY KEY,
-            user_id VARCHAR(64) REFERENCES users(id) ON DELETE CASCADE,
-            name VARCHAR(120) NOT NULL,
-            price INTEGER NOT NULL,
-            duration INTEGER NOT NULL DEFAULT 30,
-            badge_color VARCHAR(30) DEFAULT '#2563EB',
-            is_active BOOLEAN DEFAULT TRUE,
-            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-            updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-          );
-          CREATE TABLE IF NOT EXISTS clients (
-            id VARCHAR(64) PRIMARY KEY,
-            user_id VARCHAR(64) REFERENCES users(id) ON DELETE CASCADE,
-            name VARCHAR(100) NOT NULL,
-            phone VARCHAR(20) NOT NULL,
-            notes TEXT,
-            total_spent INTEGER DEFAULT 0,
-            visits_count INTEGER DEFAULT 0,
-            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-            updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-          );
-          CREATE TABLE IF NOT EXISTS appointments (
-            id VARCHAR(64) PRIMARY KEY,
-            user_id VARCHAR(64) REFERENCES users(id) ON DELETE CASCADE,
-            client_id VARCHAR(64) REFERENCES clients(id) ON DELETE SET NULL,
-            client_name VARCHAR(100) NOT NULL,
-            client_phone VARCHAR(20) DEFAULT '',
-            service_id VARCHAR(64),
-            service_name VARCHAR(120) NOT NULL,
-            service_price INTEGER NOT NULL,
-            badge_color VARCHAR(30) DEFAULT '#2563EB',
-            appointment_date VARCHAR(20) NOT NULL,
-            start_time VARCHAR(10) NOT NULL,
-            end_time VARCHAR(10) NOT NULL,
-            duration INTEGER NOT NULL DEFAULT 30,
-            status VARCHAR(20) DEFAULT 'confirmed',
-            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-            updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-          );
-          CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_active_slot 
-          ON appointments (user_id, appointment_date, start_time) 
-          WHERE status != 'cancelled';
+      const schemaSql = `
+        CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+        CREATE TABLE IF NOT EXISTS users (
+          id VARCHAR(64) PRIMARY KEY,
+          phone VARCHAR(20) NOT NULL UNIQUE,
+          ism VARCHAR(60) DEFAULT 'Master',
+          familiya VARCHAR(60) DEFAULT 'Barbero',
+          full_name VARCHAR(120) DEFAULT 'Barbero Master',
+          username VARCHAR(50) UNIQUE,
+          avatar_url TEXT,
+          bio TEXT,
+          role VARCHAR(20) DEFAULT 'MASTER',
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+          updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        );
+        CREATE TABLE IF NOT EXISTS otp_requests (
+          phone VARCHAR(20) PRIMARY KEY,
+          request_id VARCHAR(100) NOT NULL,
+          attempts INTEGER DEFAULT 0,
+          last_sent_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        );
+        CREATE TABLE IF NOT EXISTS salons (
+          id VARCHAR(64) PRIMARY KEY,
+          name VARCHAR(150) NOT NULL,
+          address TEXT NOT NULL,
+          latitude DOUBLE PRECISION NOT NULL,
+          longitude DOUBLE PRECISION NOT NULL,
+          created_by VARCHAR(64) REFERENCES users(id) ON DELETE SET NULL,
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        );
+        CREATE TABLE IF NOT EXISTS salon_members (
+          id VARCHAR(64) PRIMARY KEY,
+          salon_id VARCHAR(64) REFERENCES salons(id) ON DELETE CASCADE,
+          master_id VARCHAR(64) REFERENCES users(id) ON DELETE CASCADE,
+          role VARCHAR(20) DEFAULT 'member',
+          joined_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+          UNIQUE(salon_id, master_id)
+        );
+        CREATE TABLE IF NOT EXISTS services (
+          id VARCHAR(64) PRIMARY KEY,
+          user_id VARCHAR(64) REFERENCES users(id) ON DELETE CASCADE,
+          name VARCHAR(120) NOT NULL,
+          price INTEGER NOT NULL,
+          duration INTEGER NOT NULL DEFAULT 30,
+          badge_color VARCHAR(30) DEFAULT '#2563EB',
+          is_active BOOLEAN DEFAULT TRUE,
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+          updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        );
+        CREATE TABLE IF NOT EXISTS clients (
+          id VARCHAR(64) PRIMARY KEY,
+          user_id VARCHAR(64) REFERENCES users(id) ON DELETE CASCADE,
+          name VARCHAR(100) NOT NULL,
+          phone VARCHAR(20) NOT NULL,
+          notes TEXT,
+          total_spent INTEGER DEFAULT 0,
+          visits_count INTEGER DEFAULT 0,
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+          updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        );
+        CREATE TABLE IF NOT EXISTS appointments (
+          id VARCHAR(64) PRIMARY KEY,
+          user_id VARCHAR(64) REFERENCES users(id) ON DELETE CASCADE,
+          client_id VARCHAR(64) REFERENCES clients(id) ON DELETE SET NULL,
+          client_name VARCHAR(100) NOT NULL,
+          client_phone VARCHAR(20) DEFAULT '',
+          service_id VARCHAR(64),
+          service_name VARCHAR(120) NOT NULL,
+          service_price INTEGER NOT NULL,
+          badge_color VARCHAR(30) DEFAULT '#2563EB',
+          appointment_date VARCHAR(20) NOT NULL,
+          start_time VARCHAR(10) NOT NULL,
+          end_time VARCHAR(10) NOT NULL,
+          duration INTEGER NOT NULL DEFAULT 30,
+          status VARCHAR(20) DEFAULT 'confirmed',
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+          updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS idx_appointments_user_date ON appointments (user_id, appointment_date);
 
-          CREATE TABLE IF NOT EXISTS booking_requests (
-            id VARCHAR(64) PRIMARY KEY,
-            master_id VARCHAR(64) REFERENCES users(id) ON DELETE CASCADE,
-            client_name VARCHAR(100) NOT NULL,
-            client_phone VARCHAR(20) NOT NULL,
-            service_id VARCHAR(64) REFERENCES services(id) ON DELETE SET NULL,
-            service_name VARCHAR(120),
-            service_price INTEGER,
-            badge_color VARCHAR(30),
-            appointment_date VARCHAR(20) NOT NULL,
-            start_time VARCHAR(10) NOT NULL,
-            duration INTEGER DEFAULT 30,
-            status VARCHAR(20) DEFAULT 'pending',
-            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-          );
-          CREATE TABLE IF NOT EXISTS working_hours (
-            id VARCHAR(64) PRIMARY KEY,
-            user_id VARCHAR(64) REFERENCES users(id) ON DELETE CASCADE,
-            day_of_week VARCHAR(20) NOT NULL,
-            day_index INTEGER NOT NULL,
-            is_working BOOLEAN DEFAULT TRUE,
-            start_time VARCHAR(10) DEFAULT '09:00',
-            end_time VARCHAR(10) DEFAULT '21:00',
-            lunch_start VARCHAR(10) DEFAULT '13:00',
-            lunch_end VARCHAR(10) DEFAULT '14:00',
-            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-          );
-          CREATE TABLE IF NOT EXISTS portfolio_photos (
-            id VARCHAR(64) PRIMARY KEY,
-            user_id VARCHAR(64) REFERENCES users(id) ON DELETE CASCADE,
-            image_url TEXT NOT NULL,
-            caption VARCHAR(255),
-            likes_count INTEGER DEFAULT 0,
-            is_public BOOLEAN DEFAULT TRUE,
-            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-          );
-          CREATE TABLE IF NOT EXISTS user_settings (
-            user_id VARCHAR(64) PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
-            booking_link_active BOOLEAN DEFAULT TRUE,
-            allow_custom_time_request BOOLEAN DEFAULT FALSE,
-            allow_lunch_time_booking BOOLEAN DEFAULT FALSE,
-            daily_reminder_active BOOLEAN DEFAULT TRUE,
-            daily_reminder_time VARCHAR(10) DEFAULT '09:00',
-            client_sms_reminder_active BOOLEAN DEFAULT TRUE,
-            theme VARCHAR(20) DEFAULT 'system',
-            app_language VARCHAR(10) DEFAULT 'uz',
-            security_pin VARCHAR(4),
-            biometrics_enabled BOOLEAN DEFAULT FALSE
-          );
-          CREATE TABLE IF NOT EXISTS blocked_slots (
-            id VARCHAR(64) PRIMARY KEY,
-            user_id VARCHAR(64) REFERENCES users(id) ON DELETE CASCADE,
-            appointment_date VARCHAR(20) NOT NULL,
-            start_time VARCHAR(10) NOT NULL,
-            end_time VARCHAR(10) NOT NULL,
-            reason VARCHAR(255) DEFAULT 'Dam olish',
-            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-          );
-          CREATE TABLE IF NOT EXISTS call_log (
-            id VARCHAR(64) PRIMARY KEY,
-            user_id VARCHAR(64) REFERENCES users(id) ON DELETE CASCADE,
-            phone VARCHAR(20) NOT NULL,
-            name VARCHAR(100) DEFAULT '',
-            direction VARCHAR(30) DEFAULT 'outgoing_call',
-            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-          );
-          CREATE INDEX IF NOT EXISTS idx_call_log_user_created ON call_log (user_id, created_at DESC);
+        CREATE TABLE IF NOT EXISTS booking_requests (
+          id VARCHAR(64) PRIMARY KEY,
+          master_id VARCHAR(64) REFERENCES users(id) ON DELETE CASCADE,
+          client_name VARCHAR(100) NOT NULL,
+          client_phone VARCHAR(20) NOT NULL,
+          service_id VARCHAR(64) REFERENCES services(id) ON DELETE SET NULL,
+          service_name VARCHAR(120),
+          service_price INTEGER,
+          badge_color VARCHAR(30),
+          appointment_date VARCHAR(20) NOT NULL,
+          start_time VARCHAR(10) NOT NULL,
+          duration INTEGER DEFAULT 30,
+          status VARCHAR(20) DEFAULT 'pending',
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        );
+        CREATE TABLE IF NOT EXISTS working_hours (
+          id VARCHAR(64) PRIMARY KEY,
+          user_id VARCHAR(64) REFERENCES users(id) ON DELETE CASCADE,
+          day_of_week VARCHAR(20) NOT NULL,
+          day_index INTEGER NOT NULL,
+          is_working BOOLEAN DEFAULT TRUE,
+          start_time VARCHAR(10) DEFAULT '09:00',
+          end_time VARCHAR(10) DEFAULT '21:00',
+          lunch_start VARCHAR(10) DEFAULT '13:00',
+          lunch_end VARCHAR(10) DEFAULT '14:00',
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        );
+        CREATE TABLE IF NOT EXISTS portfolio_photos (
+          id VARCHAR(64) PRIMARY KEY,
+          user_id VARCHAR(64) REFERENCES users(id) ON DELETE CASCADE,
+          image_url TEXT NOT NULL,
+          caption VARCHAR(255),
+          likes_count INTEGER DEFAULT 0,
+          is_public BOOLEAN DEFAULT TRUE,
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        );
+        CREATE TABLE IF NOT EXISTS user_settings (
+          user_id VARCHAR(64) PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+          booking_link_active BOOLEAN DEFAULT TRUE,
+          allow_custom_time_request BOOLEAN DEFAULT FALSE,
+          allow_lunch_time_booking BOOLEAN DEFAULT FALSE,
+          daily_reminder_active BOOLEAN DEFAULT TRUE,
+          daily_reminder_time VARCHAR(10) DEFAULT '09:00',
+          client_sms_reminder_active BOOLEAN DEFAULT TRUE,
+          theme VARCHAR(20) DEFAULT 'system',
+          app_language VARCHAR(10) DEFAULT 'uz',
+          security_pin VARCHAR(4),
+          biometrics_enabled BOOLEAN DEFAULT FALSE
+        );
+        CREATE TABLE IF NOT EXISTS blocked_slots (
+          id VARCHAR(64) PRIMARY KEY,
+          user_id VARCHAR(64) REFERENCES users(id) ON DELETE CASCADE,
+          appointment_date VARCHAR(20) NOT NULL,
+          start_time VARCHAR(10) NOT NULL,
+          end_time VARCHAR(10) NOT NULL,
+          reason VARCHAR(255) DEFAULT 'Dam olish',
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS idx_blocked_slots_user_date ON blocked_slots (user_id, appointment_date);
 
-          CREATE TABLE IF NOT EXISTS legal_documents (
-            slug VARCHAR(100) PRIMARY KEY,
-            title_uz VARCHAR(255) NOT NULL,
-            title_ru VARCHAR(255) NOT NULL,
-            body_uz TEXT NOT NULL,
-            body_ru TEXT NOT NULL,
-            version VARCHAR(20) NOT NULL DEFAULT '1.0',
-            published_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-          );
-          CREATE TABLE IF NOT EXISTS legal_acceptances (
-            id VARCHAR(64) PRIMARY KEY,
-            user_id VARCHAR(64) REFERENCES users(id) ON DELETE CASCADE,
-            slug VARCHAR(100) REFERENCES legal_documents(slug) ON DELETE CASCADE,
-            version VARCHAR(20) NOT NULL,
-            accepted_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-          );
-          CREATE TABLE IF NOT EXISTS notifications (
-            id VARCHAR(64) PRIMARY KEY,
-            user_id VARCHAR(64) REFERENCES users(id) ON DELETE CASCADE,
-            type VARCHAR(50) NOT NULL,
-            title VARCHAR(255) NOT NULL,
-            body TEXT NOT NULL,
-            data JSONB DEFAULT '{}',
-            read_at TIMESTAMP WITH TIME ZONE,
-            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-          );
-          CREATE TABLE IF NOT EXISTS push_subscriptions (
-            id VARCHAR(64) PRIMARY KEY,
-            user_id VARCHAR(64) REFERENCES users(id) ON DELETE CASCADE,
-            endpoint TEXT NOT NULL UNIQUE,
-            p256dh TEXT NOT NULL,
-            auth TEXT NOT NULL,
-            device VARCHAR(150),
-            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-          );
-          CREATE TABLE IF NOT EXISTS reviews (
-            id VARCHAR(64) PRIMARY KEY,
-            master_id VARCHAR(64) REFERENCES users(id) ON DELETE CASCADE,
-            client_name VARCHAR(100) NOT NULL,
-            rating INTEGER NOT NULL DEFAULT 5,
-            comment TEXT,
-            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-          );
-        `;
-      }
+        CREATE TABLE IF NOT EXISTS call_log (
+          id VARCHAR(64) PRIMARY KEY,
+          user_id VARCHAR(64) REFERENCES users(id) ON DELETE CASCADE,
+          phone VARCHAR(20) NOT NULL,
+          name VARCHAR(100) DEFAULT '',
+          direction VARCHAR(30) DEFAULT 'outgoing_call',
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS idx_call_log_user_created ON call_log (user_id, created_at DESC);
 
-      // Execute schema creation safely
+        CREATE TABLE IF NOT EXISTS legal_documents (
+          slug VARCHAR(100) PRIMARY KEY,
+          title_uz VARCHAR(255) NOT NULL,
+          title_ru VARCHAR(255) NOT NULL,
+          body_uz TEXT NOT NULL,
+          body_ru TEXT NOT NULL,
+          version VARCHAR(20) NOT NULL DEFAULT '1.0',
+          published_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        );
+        CREATE TABLE IF NOT EXISTS legal_acceptances (
+          id VARCHAR(64) PRIMARY KEY,
+          user_id VARCHAR(64) REFERENCES users(id) ON DELETE CASCADE,
+          slug VARCHAR(100) REFERENCES legal_documents(slug) ON DELETE CASCADE,
+          version VARCHAR(20) NOT NULL,
+          accepted_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        );
+        CREATE TABLE IF NOT EXISTS notifications (
+          id VARCHAR(64) PRIMARY KEY,
+          user_id VARCHAR(64) REFERENCES users(id) ON DELETE CASCADE,
+          type VARCHAR(50) NOT NULL,
+          title VARCHAR(255) NOT NULL,
+          body TEXT NOT NULL,
+          data JSONB DEFAULT '{}',
+          read_at TIMESTAMP WITH TIME ZONE,
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications (user_id, created_at DESC);
+
+        CREATE TABLE IF NOT EXISTS push_subscriptions (
+          id VARCHAR(64) PRIMARY KEY,
+          user_id VARCHAR(64) REFERENCES users(id) ON DELETE CASCADE,
+          endpoint TEXT NOT NULL UNIQUE,
+          p256dh TEXT NOT NULL,
+          auth TEXT NOT NULL,
+          device VARCHAR(150),
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        );
+        CREATE TABLE IF NOT EXISTS reviews (
+          id VARCHAR(64) PRIMARY KEY,
+          master_id VARCHAR(64) REFERENCES users(id) ON DELETE CASCADE,
+          client_name VARCHAR(100) NOT NULL,
+          rating INTEGER NOT NULL DEFAULT 5,
+          comment TEXT,
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        );
+      `;
+
       try {
         await pool.query('SELECT pg_advisory_lock(8472910)');
         await pool.query(schemaSql);
@@ -471,25 +496,17 @@ export class Database {
         await pool.query('SELECT pg_advisory_unlock(8472910)').catch(() => {});
       }
 
-      // Safe schema adjustments
-      try {
-        await pool.query(`
-          ALTER TABLE appointments ALTER COLUMN client_phone DROP NOT NULL;
-          ALTER TABLE appointments ALTER COLUMN client_phone SET DEFAULT '';
-          ALTER TABLE appointments ALTER COLUMN service_id DROP NOT NULL;
-        `);
-      } catch (_) {}
-
       this.isInitialized = true;
+      this.initError = null;
       console.log('✅ [PostgreSQL] Database schema initialized and verified');
     } catch (error: any) {
       console.warn('⚠️ [PostgreSQL] Schema init notice:', error.message);
-      if (isProduction && !config.databaseUrl) {
+      this.initError = error;
+      if (isProduction) {
         throw error;
       }
     }
   }
-
   // --- Users ---
   public async getUserById(id: string): Promise<User | null> {
     const res = await this.query('SELECT * FROM users WHERE id = $1 LIMIT 1', [id]);
@@ -867,18 +884,52 @@ export class Database {
   }
 
   // --- Appointments ---
-  public async hasActiveSlotConflict(userId: string, date: string, startTime: string, excludeId?: string): Promise<boolean> {
-    const query = excludeId
-      ? "SELECT id FROM appointments WHERE user_id = $1 AND appointment_date = $2 AND start_time = $3 AND id != $4 AND status != 'cancelled' LIMIT 1"
-      : "SELECT id FROM appointments WHERE user_id = $1 AND appointment_date = $2 AND start_time = $3 AND status != 'cancelled' LIMIT 1";
-    const params = excludeId ? [userId, date, startTime, excludeId] : [userId, date, startTime];
-    const res = await this.query(query, params);
+  public async hasActiveSlotConflict(
+    userId: string,
+    date: string,
+    startTime: string,
+    endTimeOrDurationOrExcludeId?: string | number,
+    excludeId?: string
+  ): Promise<boolean> {
+    let endTime: string;
+    let finalExcludeId = excludeId;
+
+    if (typeof endTimeOrDurationOrExcludeId === 'number') {
+      endTime = addMinutesToTime(startTime, endTimeOrDurationOrExcludeId);
+    } else if (typeof endTimeOrDurationOrExcludeId === 'string') {
+      if (endTimeOrDurationOrExcludeId.includes(':')) {
+        endTime = endTimeOrDurationOrExcludeId;
+      } else {
+        finalExcludeId = endTimeOrDurationOrExcludeId;
+        endTime = addMinutesToTime(startTime, 30);
+      }
+    } else {
+      endTime = addMinutesToTime(startTime, 30);
+    }
+
+    // Overlap condition for intervals [A_start, A_end) and [B_start, B_end):
+    // start_time < endTime AND end_time > startTime
+    const aptQuery = finalExcludeId
+      ? `SELECT id FROM appointments 
+         WHERE user_id = $1 AND appointment_date = $2 
+           AND start_time < $3 AND end_time > $4 
+           AND id != $5 AND status != 'cancelled' LIMIT 1`
+      : `SELECT id FROM appointments 
+         WHERE user_id = $1 AND appointment_date = $2 
+           AND start_time < $3 AND end_time > $4 
+           AND status != 'cancelled' LIMIT 1`;
+    const aptParams = finalExcludeId
+      ? [userId, date, endTime, startTime, finalExcludeId]
+      : [userId, date, endTime, startTime];
+    const res = await this.query(aptQuery, aptParams);
     if (res.rows.length > 0) return true;
 
     // Also check blocked slots
     const blockedRes = await this.query(
-      "SELECT id FROM blocked_slots WHERE user_id = $1 AND appointment_date = $2 AND start_time = $3 LIMIT 1",
-      [userId, date, startTime]
+      `SELECT id FROM blocked_slots 
+       WHERE user_id = $1 AND appointment_date = $2 
+         AND start_time < $3 AND end_time > $4 LIMIT 1`,
+      [userId, date, endTime, startTime]
     );
     return blockedRes.rows.length > 0;
   }

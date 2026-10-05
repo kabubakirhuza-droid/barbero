@@ -26,6 +26,15 @@ router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
   }
 });
 
+// Helper to normalize and validate Uzbekistan phone
+export function normalizeUzPhone(raw: string): string {
+  let digits = String(raw || '').replace(/\D/g, '');
+  if (digits.length === 9) {
+    digits = `998${digits}`;
+  }
+  return `+${digits}`;
+}
+
 // POST /call-log - Record outgoing or incoming manual call
 router.post('/', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -37,8 +46,14 @@ router.post('/', async (req: AuthRequest, res: Response): Promise<void> => {
       return;
     }
 
-    const cleanPhone = String(phone).trim();
-    const cleanName = name ? String(name).trim() : '';
+    const normalizedPhone = normalizeUzPhone(phone);
+    if (!/^\+998\d{9}$/.test(normalizedPhone)) {
+      res.status(400).json({ error: "Telefon raqami noto'g'ri. +998XXXXXXXXX formatida kiriting (masalan, +998901234567)" });
+      return;
+    }
+
+    const cleanName = name ? String(name).trim().slice(0, 100) : '';
+    const cleanPhone = normalizedPhone.slice(0, 20);
     const cleanDirection = ['outgoing_call', 'incoming_manual', 'booking_request', 'appointment'].includes(direction)
       ? direction
       : 'outgoing_call';

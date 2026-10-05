@@ -9,6 +9,9 @@
     "start": "cd mobile && npm start",
     "build:mobile": "cd mobile && npm run build",
     "build:backend": "cd backend && npm run build",
+    "typecheck:mobile": "cd mobile && npm run typecheck",
+    "typecheck:backend": "cd backend && npm run build",
+    "typecheck": "npm run typecheck:backend && npm run typecheck:mobile",
     "build": "cd backend && npm install && npm run build && cd ../mobile && npm install && npm run build && cd .. && node mobile/scripts/patch-web-build.js",
     "test": "node backend/test_e2e.js"
   },

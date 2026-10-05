@@ -72,7 +72,7 @@ CREATE TABLE IF NOT EXISTS clients (
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- 7. Appointments table with unique active slot index to prevent double booking
+-- 7. Appointments table
 CREATE TABLE IF NOT EXISTS appointments (
   id VARCHAR(64) PRIMARY KEY,
   user_id VARCHAR(64) REFERENCES users(id) ON DELETE CASCADE,
@@ -87,14 +87,12 @@ CREATE TABLE IF NOT EXISTS appointments (
   start_time VARCHAR(10) NOT NULL,       -- "14:00"
   end_time VARCHAR(10) NOT NULL,         -- "14:30"
   duration INTEGER NOT NULL DEFAULT 30,
-  status VARCHAR(20) DEFAULT 'confirmed', -- confirmed, cancelled, completed
+  status VARCHAR(20) DEFAULT 'confirmed', -- confirmed, arrived, completed, no_show, cancelled
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_active_slot 
-ON appointments (user_id, appointment_date, start_time) 
-WHERE status != 'cancelled';
+CREATE INDEX IF NOT EXISTS idx_appointments_user_date ON appointments (user_id, appointment_date);
 
 -- 8. Booking Requests table
 CREATE TABLE IF NOT EXISTS booking_requests (
@@ -153,7 +151,66 @@ CREATE TABLE IF NOT EXISTS user_settings (
   biometrics_enabled BOOLEAN DEFAULT FALSE
 );
 
--- 12. Push Subscriptions table (Web Push / VAPID)
+-- 12. Blocked Slots table (Dam olish / Tushlik / Yopiq vaqt)
+CREATE TABLE IF NOT EXISTS blocked_slots (
+  id VARCHAR(64) PRIMARY KEY,
+  user_id VARCHAR(64) REFERENCES users(id) ON DELETE CASCADE,
+  appointment_date VARCHAR(20) NOT NULL,
+  start_time VARCHAR(10) NOT NULL,
+  end_time VARCHAR(10) NOT NULL,
+  reason VARCHAR(255) DEFAULT 'Dam olish',
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_blocked_slots_user_date ON blocked_slots (user_id, appointment_date);
+
+-- 13. Call Log table
+CREATE TABLE IF NOT EXISTS call_log (
+  id VARCHAR(64) PRIMARY KEY,
+  user_id VARCHAR(64) REFERENCES users(id) ON DELETE CASCADE,
+  phone VARCHAR(20) NOT NULL,
+  name VARCHAR(100) DEFAULT '',
+  direction VARCHAR(30) DEFAULT 'outgoing_call',
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_call_log_user_created ON call_log (user_id, created_at DESC);
+
+-- 14. Legal Documents table
+CREATE TABLE IF NOT EXISTS legal_documents (
+  slug VARCHAR(100) PRIMARY KEY,
+  title_uz VARCHAR(255) NOT NULL,
+  title_ru VARCHAR(255) NOT NULL,
+  body_uz TEXT NOT NULL,
+  body_ru TEXT NOT NULL,
+  version VARCHAR(20) NOT NULL DEFAULT '1.0',
+  published_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- 15. Legal Acceptances table
+CREATE TABLE IF NOT EXISTS legal_acceptances (
+  id VARCHAR(64) PRIMARY KEY,
+  user_id VARCHAR(64) REFERENCES users(id) ON DELETE CASCADE,
+  slug VARCHAR(100) REFERENCES legal_documents(slug) ON DELETE CASCADE,
+  version VARCHAR(20) NOT NULL,
+  accepted_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- 16. Notifications table
+CREATE TABLE IF NOT EXISTS notifications (
+  id VARCHAR(64) PRIMARY KEY,
+  user_id VARCHAR(64) REFERENCES users(id) ON DELETE CASCADE,
+  type VARCHAR(50) NOT NULL,
+  title VARCHAR(255) NOT NULL,
+  body TEXT NOT NULL,
+  data JSONB DEFAULT '{}',
+  read_at TIMESTAMP WITH TIME ZONE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications (user_id, created_at DESC);
+
+-- 17. Push Subscriptions table (Web Push / VAPID)
 CREATE TABLE IF NOT EXISTS push_subscriptions (
   id VARCHAR(64) PRIMARY KEY,
   user_id VARCHAR(64) REFERENCES users(id) ON DELETE CASCADE,
@@ -164,12 +221,12 @@ CREATE TABLE IF NOT EXISTS push_subscriptions (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- 13. Reviews table (Master Ratings & Feedback)
+-- 18. Reviews table (Master Ratings & Feedback)
 CREATE TABLE IF NOT EXISTS reviews (
   id VARCHAR(64) PRIMARY KEY,
   master_id VARCHAR(64) REFERENCES users(id) ON DELETE CASCADE,
   client_name VARCHAR(100) NOT NULL,
-  rating INTEGER NOT NULL DEFAULT 5, -- 1 to 5 stars
+  rating INTEGER NOT NULL DEFAULT 5,
   comment TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
