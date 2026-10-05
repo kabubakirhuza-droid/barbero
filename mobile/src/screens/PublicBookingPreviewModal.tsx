@@ -55,6 +55,8 @@ export const PublicBookingPreviewModal: React.FC<PublicBookingPreviewModalProps>
   
   const [clientName, setClientName] = useState('');
   const [rawPhone, setRawPhone] = useState('');
+  const [isUserLoggedIn, setIsUserLoggedIn] = useState(false);
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [isReviewsModalOpen, setIsReviewsModalOpen] = useState(false);
   const [ratingStats, setRatingStats] = useState({ rating: 4.9, count: 18 });
   const [isSuccess, setIsSuccess] = useState(false);
@@ -85,16 +87,43 @@ export const PublicBookingPreviewModal: React.FC<PublicBookingPreviewModalProps>
 
   const selectedDateObj = datesList[selectedDateIndex] || datesList[0];
 
-  // Prefill client profile if saved in AsyncStorage
+  // Prefill client profile automatically if logged in or saved in AsyncStorage
   useEffect(() => {
     const initClientInfo = async () => {
       try {
-        const savedName = await AsyncStorage.getItem('barbero_client_name');
-        const savedPhone = await AsyncStorage.getItem('barbero_client_phone');
-        if (savedName) setClientName(savedName);
+        let savedName = await AsyncStorage.getItem('barbero_client_name');
+        let savedPhone = await AsyncStorage.getItem('barbero_client_phone');
+        if (!savedName) savedName = await AsyncStorage.getItem('app_user_name');
+        if (!savedPhone) savedPhone = await AsyncStorage.getItem('app_user_phone');
+
+        // Check active login token
+        const token = await api.getToken();
+        if (token) {
+          try {
+            const meRes = await api.getMe();
+            if (meRes?.user) {
+              setIsUserLoggedIn(true);
+              const fullName = meRes.user.name || meRes.user.ism || '';
+              if (fullName && (!savedName || savedName === 'Foydalanuvchi')) {
+                savedName = fullName;
+              }
+              if (meRes.user.phone && !savedPhone) {
+                savedPhone = meRes.user.phone;
+              }
+            }
+          } catch (e) {}
+        }
+
+        if (savedName && savedName !== 'Foydalanuvchi') {
+          setClientName(savedName);
+        }
         if (savedPhone) {
           const clean = savedPhone.replace(/\D/g, '');
-          setRawPhone(clean.startsWith('998') ? clean.slice(3) : clean);
+          const finalRaw = clean.startsWith('998') ? clean.slice(3) : clean;
+          setRawPhone(finalRaw);
+          if (finalRaw.length >= 9) {
+            setIsUserLoggedIn(true);
+          }
         }
       } catch (e) {}
     };
@@ -540,36 +569,71 @@ export const PublicBookingPreviewModal: React.FC<PublicBookingPreviewModalProps>
 
             {/* Step 3: Client Details */}
             <Text style={styles.sectionTitle}>3. Ma'lumotlaringiz</Text>
-            <View style={styles.inputsCard}>
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Ismingiz</Text>
-                <View style={styles.inputRow}>
-                  <UserIcon size={18} color={COLOR_PRIMARY} />
-                  <TextInput
-                    style={styles.innerInput}
-                    value={clientName}
-                    onChangeText={setClientName}
-                    placeholder="Ismingizni kiriting"
-                    placeholderTextColor={colors.textMuted}
-                  />
+            {isUserLoggedIn && clientName && rawPhone.length >= 9 && !isEditingProfile ? (
+              <View style={styles.loggedInProfileCard}>
+                <View style={styles.loggedInAvatar}>
+                  <Text style={styles.loggedInAvatarText}>
+                    {clientName.charAt(0).toUpperCase()}
+                  </Text>
                 </View>
+                <View style={{ flex: 1 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Text style={styles.loggedInName}>{clientName}</Text>
+                    <View style={styles.verifiedTag}>
+                      <Check size={11} color="#059669" />
+                      <Text style={styles.verifiedTagText}>Hisobingiz</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.loggedInPhone}>{getFormattedPhoneDisplay()}</Text>
+                </View>
+                <TouchableOpacity
+                  onPress={() => setIsEditingProfile(true)}
+                  style={styles.editProfileBtn}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.editProfileText}>O'zgartirish</Text>
+                </TouchableOpacity>
               </View>
+            ) : (
+              <View style={styles.inputsCard}>
+                {isEditingProfile && (
+                  <View style={styles.editingBanner}>
+                    <Text style={styles.editingBannerText}>Ma'lumotlarni tahrirlash</Text>
+                    <TouchableOpacity onPress={() => setIsEditingProfile(false)}>
+                      <Text style={styles.doneEditText}>Tayyor</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Ismingiz</Text>
+                  <View style={styles.inputRow}>
+                    <UserIcon size={18} color={COLOR_PRIMARY} />
+                    <TextInput
+                      style={styles.innerInput}
+                      value={clientName}
+                      onChangeText={setClientName}
+                      placeholder="Ismingizni kiriting"
+                      placeholderTextColor={colors.textMuted}
+                    />
+                  </View>
+                </View>
 
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Telefon raqamingiz</Text>
-                <View style={styles.inputRow}>
-                  <Phone size={18} color={COLOR_PRIMARY} />
-                  <TextInput
-                    style={styles.innerInput}
-                    value={getFormattedPhoneDisplay()}
-                    onChangeText={formatPhoneInput}
-                    keyboardType="phone-pad"
-                    placeholder="+998 90 123 45 67"
-                    placeholderTextColor={colors.textMuted}
-                  />
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Telefon raqamingiz</Text>
+                  <View style={styles.inputRow}>
+                    <Phone size={18} color={COLOR_PRIMARY} />
+                    <TextInput
+                      style={styles.innerInput}
+                      value={getFormattedPhoneDisplay()}
+                      onChangeText={formatPhoneInput}
+                      keyboardType="phone-pad"
+                      placeholder="+998 90 123 45 67"
+                      placeholderTextColor={colors.textMuted}
+                    />
+                  </View>
                 </View>
               </View>
-            </View>
+            )}
 
             {/* Submit Booking Button */}
             <Button
@@ -874,6 +938,86 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: '900',
   },
+  loggedInProfileCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.card,
+    borderRadius: 18,
+    padding: 14,
+    borderWidth: 1.5,
+    borderColor: '#3B82F6',
+    gap: 12,
+    shadowColor: colors.shadowColor,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  loggedInAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: COLOR_PRIMARY,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loggedInAvatarText: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+  loggedInName: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: colors.textPrimary,
+  },
+  loggedInPhone: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  verifiedTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#ECFDF5',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  verifiedTagText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#059669',
+  },
+  editProfileBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 10,
+    backgroundColor: colors.primaryLight,
+  },
+  editProfileText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLOR_PRIMARY,
+  },
+  editingBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  editingBannerText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.textMuted,
+  },
+  doneEditText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLOR_PRIMARY,
+  },
   inputsCard: {
     backgroundColor: colors.card,
     borderRadius: 18,
@@ -907,6 +1051,13 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.textPrimary,
     height: '100%',
+    ...(Platform.OS === 'web'
+      ? ({
+          outlineStyle: 'none',
+          outlineWidth: 0,
+          outline: 'none',
+        } as any)
+      : {}),
   },
   successContainer: {
     flex: 1,

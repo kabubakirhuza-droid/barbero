@@ -1,11 +1,43 @@
 import { Router, Response } from 'express';
-import { db, Appointment } from '../db';
+import { db, Appointment, addMinutesToTime, getTashkentNow } from '../db';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 
 const router = Router();
 
 // Require auth on all appointment routes
 router.use(authenticateToken);
+
+// Validation helpers
+function isValidDate(str: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(String(str || ''));
+}
+
+function isValidTime(str: string): boolean {
+  return /^([01]\d|2[0-3]):[0-5]\d$/.test(String(str || ''));
+}
+
+function isPastSlot(date: string, startTime: string): boolean {
+  const { dateStr: today, timeStr: nowTime } = getTashkentNow();
+  if (date < today) return true;
+  if (date === today && startTime < nowTime) return true;
+  return false;
+}
+
+// Calculate next sequence number for "Mijoz N" on a given day
+async function getNextMijozName(userId: string, date: string): Promise<string> {
+  const dayAppts = await db.getAppointments(userId, date);
+  let maxNum = 0;
+  for (const apt of dayAppts) {
+    const match = apt.clientName.match(/^Mijoz\s+(\d+)$/i);
+    if (match) {
+      const num = parseInt(match[1], 10);
+      if (!isNaN(num) && num > maxNum) {
+        maxNum = num;
+      }
+    }
+  }
+  return `Mijoz ${maxNum + 1}`;
+}
 
 // GET /appointments?date=YYYY-MM-DD
 router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
@@ -14,10 +46,10 @@ router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
     const { date } = req.query;
     const list = await db.getAppointments(userId, date as string | undefined);
 
-    // Calculate day total
+    // Calculate day total for valid non-cancelled appointments
     const dayTotal = list
-      .filter((a) => a.status !== 'cancelled')
-      .reduce((sum, item) => sum + item.servicePrice, 0);
+      .filter((a) => a.status !== 'cancelled' && a.status !== 'no_show')
+      .reduce((sum, item) => sum + (Number(item.servicePrice) || 0), 0);
 
     res.json({
       appointments: list,
@@ -30,66 +62,123 @@ router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
   }
 });
 
-// POST /appointments/quick - 1-Click Instant Booking on Free Slot
+// GET /appointments/today - Barbero 1-Screen Workday Overview
+router.get('/today', async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.user!.userId;
+    const date = req.query.date as string | undefined;
+    const schedule = await db.getTodaySchedule(userId, date);
+    res.json({
+      success: true,
+      ...schedule,
+    });
+  } catch (error) {
+    console.error('[Appointments GET today error]:', error);
+    res.status(500).json({ error: 'Kunlik jadvalni yuklashda xatolik yuz berdi' });
+  }
+});
+
+// POST /appointments/quick - Rapid Booking (Phone lookup / Walk-in / 1-tap slot)
 router.post('/quick', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const userId = req.user!.userId;
-    const { date, startTime } = req.body;
+    const { date, startTime, phone, name, serviceId, duration: customDuration, isWalkIn, notes } = req.body;
 
-    if (!date || !startTime) {
+    const { dateStr: todayStr, timeStr: nowTime } = getTashkentNow();
+    const finalDate = date || todayStr;
+    const finalStartTime = startTime || (isWalkIn ? nowTime : undefined);
+
+    if (!finalDate || !finalStartTime) {
       res.status(400).json({ error: 'Sana va vaqt kiritilishi shart' });
       return;
     }
 
-    // Check double booking
-    if (await db.hasActiveSlotConflict(userId, date, startTime)) {
-      res.status(409).json({ error: "Ushbu vaqt oralig'i allaqachon band qilingan" });
+    if (!isValidDate(finalDate)) {
+      res.status(400).json({ error: "Sana formati noto'g'ri (YYYY-MM-DD)" });
+      return;
+    }
+
+    if (!isValidTime(finalStartTime)) {
+      res.status(400).json({ error: "Vaqt formati noto'g'ri (HH:MM)" });
       return;
     }
 
     // Default master service
-    const userServices = await db.getServices(userId);
-    const defaultService = userServices[0] || {
-      id: `srv-${userId}-def`,
-      name: 'Soch olish',
-      price: 50000,
-      duration: 30,
-      badgeColor: '#2563EB',
-    };
+    let srvName = 'Soch olish';
+    let srvPrice = 50000;
+    let srvDuration = customDuration || 30;
+    let srvColor = '#2563EB';
+    let finalServiceId = serviceId;
 
-    const nextOrderNumber = (await db.getAppointments(userId, date)).length + 1;
-    const clientName = `Mijoz ${nextOrderNumber}`;
-    const defaultClientPhone = '';
+    if (serviceId) {
+      const srv = await db.getServiceById(serviceId);
+      if (srv && srv.userId === userId) {
+        srvName = srv.name;
+        srvPrice = srv.price;
+        srvDuration = customDuration || srv.duration;
+        srvColor = srv.badgeColor || '#2563EB';
+      }
+    } else {
+      const userServices = await db.getServices(userId);
+      const activeServices = userServices.filter((s) => s.isActive);
+      const chosen = activeServices[0] || userServices[0];
+      if (chosen) {
+        srvName = chosen.name;
+        srvPrice = chosen.price;
+        srvDuration = customDuration || chosen.duration;
+        srvColor = chosen.badgeColor || '#2563EB';
+        finalServiceId = chosen.id;
+      }
+    }
 
-    // Calculate end time
-    const [hours, minutes] = startTime.split(':').map(Number);
-    const totalMinutes = (hours || 0) * 60 + (minutes || 0) + defaultService.duration;
-    const endHours = Math.floor(totalMinutes / 60) % 24;
-    const endMins = totalMinutes % 60;
-    const endTime = `${String(endHours).padStart(2, '0')}:${String(endMins).padStart(2, '0')}`;
+    const endTime = addMinutesToTime(finalStartTime, srvDuration);
+
+    // Check interval collision
+    if (await db.hasActiveSlotConflict(userId, finalDate, finalStartTime, endTime)) {
+      res.status(409).json({ error: "Ushbu vaqt oralig'i allaqachon band qilingan" });
+      return;
+    }
+
+    let finalClientName = name ? String(name).trim().slice(0, 100) : '';
+    let finalClientPhone = phone ? String(phone).trim() : '';
+    let clientId: string | undefined;
+
+    if (finalClientPhone) {
+      const clientObj = await db.createOrUpdateClient(userId, finalClientName || 'Mijoz', finalClientPhone, srvPrice, notes);
+      clientId = clientObj.id;
+      finalClientName = clientObj.name;
+      finalClientPhone = clientObj.phone;
+
+      // Add to call log as appointment booking
+      await db.addCallLog(userId, finalClientPhone, finalClientName, 'appointment');
+    } else if (!finalClientName) {
+      finalClientName = await getNextMijozName(userId, finalDate);
+    }
+
+    const initialStatus = isWalkIn ? 'in_service' : 'confirmed';
 
     const newAppointment: Appointment = {
       id: `apt-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
       userId,
-      clientId: undefined,
-      clientName,
-      clientPhone: defaultClientPhone,
-      serviceId: defaultService.id,
-      serviceName: defaultService.name,
-      servicePrice: defaultService.price,
-      badgeColor: defaultService.badgeColor,
-      date,
-      startTime,
+      clientId,
+      clientName: finalClientName,
+      clientPhone: finalClientPhone,
+      serviceId: finalServiceId || 'srv-1',
+      serviceName: srvName,
+      servicePrice: srvPrice,
+      badgeColor: srvColor,
+      date: finalDate,
+      startTime: finalStartTime,
       endTime,
-      duration: defaultService.duration,
-      status: 'confirmed',
+      duration: srvDuration,
+      status: initialStatus as any,
     };
 
     await db.createAppointment(newAppointment);
 
     res.status(201).json({
       success: true,
-      message: 'Tezkor yozuv yaratildi',
+      message: `${finalClientName} muvaffaqiyatli yozildi`,
       appointment: newAppointment,
     });
   } catch (error: any) {
@@ -102,6 +191,80 @@ router.post('/quick', async (req: AuthRequest, res: Response): Promise<void> => 
   }
 });
 
+// POST /appointments/repeat - Repeat last booking for client
+router.post('/repeat', async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.user!.userId;
+    const { clientId, phone, date, startTime } = req.body;
+
+    if (!date || !startTime) {
+      res.status(400).json({ error: 'Sana va vaqt kiritilishi shart' });
+      return;
+    }
+
+    let targetClient;
+    if (clientId) {
+      targetClient = await db.getClientById(clientId, userId);
+    } else if (phone) {
+      const search = await db.searchClientByPhone(userId, phone);
+      if (search.found && search.client) {
+        targetClient = search.client;
+      }
+    }
+
+    if (!targetClient) {
+      res.status(404).json({ error: 'Mijoz topilmadi' });
+      return;
+    }
+
+    const pastApts = await db.getAppointmentsByClientId(targetClient.id, userId);
+    const lastApt = pastApts.find((a) => a.status !== 'cancelled');
+
+    const srvId = lastApt?.serviceId || 'srv-1';
+    const srvName = lastApt?.serviceName || 'Soch olish';
+    const srvPrice = lastApt?.servicePrice || 50000;
+    const srvDuration = lastApt?.duration || 30;
+    const srvColor = lastApt?.badgeColor || '#2563EB';
+
+    const endTime = addMinutesToTime(startTime, srvDuration);
+
+    if (await db.hasActiveSlotConflict(userId, date, startTime, endTime)) {
+      res.status(409).json({ error: "Ushbu vaqt oralig'i allaqachon band qilingan" });
+      return;
+    }
+
+    const newAppointment: Appointment = {
+      id: `apt-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      userId,
+      clientId: targetClient.id,
+      clientName: targetClient.name,
+      clientPhone: targetClient.phone,
+      serviceId: srvId,
+      serviceName: srvName,
+      servicePrice: srvPrice,
+      badgeColor: srvColor,
+      date,
+      startTime,
+      endTime,
+      duration: srvDuration,
+      status: 'confirmed',
+    };
+
+    await db.createAppointment(newAppointment);
+    await db.createOrUpdateClient(userId, targetClient.name, targetClient.phone, srvPrice);
+    await db.addCallLog(userId, targetClient.phone, targetClient.name, 'appointment');
+
+    res.status(201).json({
+      success: true,
+      message: `${targetClient.name} qayta yozildi`,
+      appointment: newAppointment,
+    });
+  } catch (error) {
+    console.error('[Appointments POST repeat error]:', error);
+    res.status(500).json({ error: 'Qayta yozuvni yaratishda xatolik yuz berdi' });
+  }
+});
+
 // POST /appointments - Standard creation
 router.post('/', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -110,12 +273,8 @@ router.post('/', async (req: AuthRequest, res: Response): Promise<void> => {
       clientName,
       clientPhone,
       serviceId,
-      serviceName,
-      servicePrice,
-      badgeColor,
       date,
       startTime,
-      duration = 30,
     } = req.body;
 
     if (!startTime || !date) {
@@ -123,26 +282,61 @@ router.post('/', async (req: AuthRequest, res: Response): Promise<void> => {
       return;
     }
 
-    // Check double booking conflict
-    if (await db.hasActiveSlotConflict(userId, date, startTime)) {
+    if (!isValidDate(date)) {
+      res.status(400).json({ error: "Sana formati noto'g'ri (YYYY-MM-DD)" });
+      return;
+    }
+
+    if (!isValidTime(startTime)) {
+      res.status(400).json({ error: "Vaqt formati noto'g'ri (HH:MM)" });
+      return;
+    }
+
+    if (isPastSlot(date, startTime)) {
+      res.status(400).json({ error: "O'tib ketgan vaqtga yozuv yaratib bo'lmaydi" });
+      return;
+    }
+
+    // Resolve service from server-side database
+    let srvName = 'Soch olish';
+    let srvPrice = 50000;
+    let srvDuration = 30;
+    let srvColor = '#2563EB';
+    let finalServiceId = serviceId;
+
+    if (serviceId) {
+      const srv = await db.getServiceById(serviceId);
+      if (srv && srv.userId === userId) {
+        srvName = srv.name;
+        srvPrice = srv.price;
+        srvDuration = srv.duration;
+        srvColor = srv.badgeColor || '#2563EB';
+      }
+    } else {
+      const userServices = await db.getServices(userId);
+      if (userServices.length > 0) {
+        srvName = userServices[0].name;
+        srvPrice = userServices[0].price;
+        srvDuration = userServices[0].duration;
+        srvColor = userServices[0].badgeColor || '#2563EB';
+        finalServiceId = userServices[0].id;
+      }
+    }
+
+    const endTime = addMinutesToTime(startTime, srvDuration);
+
+    // Check double booking interval conflict
+    if (await db.hasActiveSlotConflict(userId, date, startTime, endTime)) {
       res.status(409).json({ error: "Ushbu vaqt oralig'i allaqachon band qilingan" });
       return;
     }
 
-    const [hours, minutes] = startTime.split(':').map(Number);
-    const totalMinutes = (hours || 0) * 60 + (minutes || 0) + Number(duration);
-    const endHours = Math.floor(totalMinutes / 60) % 24;
-    const endMins = totalMinutes % 60;
-    const endTime = `${String(endHours).padStart(2, '0')}:${String(endMins).padStart(2, '0')}`;
-
-    const appts = await db.getAppointments(userId);
-    const finalClientName = clientName ? String(clientName).trim() : `Mijoz ${appts.length + 1}`;
-    const finalClientPhone = clientPhone ? String(clientPhone).trim() : '';
-    const finalPrice = Number(servicePrice) || 50000;
+    const finalClientName = clientName ? String(clientName).trim().slice(0, 100) : await getNextMijozName(userId, date);
+    const finalClientPhone = clientPhone ? String(clientPhone).trim().slice(0, 20) : '';
 
     let clientObj;
     if (finalClientPhone) {
-      clientObj = await db.createOrUpdateClient(userId, finalClientName, finalClientPhone, finalPrice);
+      clientObj = await db.createOrUpdateClient(userId, finalClientName, finalClientPhone, srvPrice);
     }
 
     const newAppointment: Appointment = {
@@ -151,14 +345,14 @@ router.post('/', async (req: AuthRequest, res: Response): Promise<void> => {
       clientId: clientObj?.id,
       clientName: finalClientName,
       clientPhone: finalClientPhone,
-      serviceId: serviceId || 'srv-1',
-      serviceName: serviceName || 'Soch olish',
-      servicePrice: finalPrice,
-      badgeColor: badgeColor || '#2563EB',
+      serviceId: finalServiceId || 'srv-1',
+      serviceName: srvName,
+      servicePrice: srvPrice,
+      badgeColor: srvColor,
       date,
       startTime,
       endTime,
-      duration: Number(duration),
+      duration: srvDuration,
       status: 'confirmed',
     };
 
@@ -174,19 +368,18 @@ router.post('/', async (req: AuthRequest, res: Response): Promise<void> => {
   }
 });
 
-// PUT /appointments/:id - Edit client name, phone, service, date
+// PUT /appointments/:id - Edit appointment
 router.put('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const userId = req.user!.userId;
     const { id } = req.params;
-    const current = await db.getAppointmentById(id);
+    const current = await db.getAppointmentById(id, userId);
 
-    if (!current || current.userId !== userId) {
+    if (!current) {
       res.status(404).json({ error: 'Bandlik topilmadi yoki ruxsat berilmagan' });
       return;
     }
 
-    // Whitelist allowed fields to prevent arbitrary body injection
     const allowedFields = [
       'clientName',
       'clientPhone',
@@ -209,19 +402,38 @@ router.put('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
       }
     }
 
+    // Validate date & time format if updated
+    if (safeUpdates.date && !isValidDate(safeUpdates.date)) {
+      res.status(400).json({ error: "Sana formati noto'g'ri (YYYY-MM-DD)" });
+      return;
+    }
+    if (safeUpdates.startTime && !isValidTime(safeUpdates.startTime)) {
+      res.status(400).json({ error: "Vaqt formati noto'g'ri (HH:MM)" });
+      return;
+    }
+
     // If changing slot, verify no collision
-    if (safeUpdates.date || safeUpdates.startTime) {
+    if (safeUpdates.date || safeUpdates.startTime || safeUpdates.duration) {
       const targetDate = safeUpdates.date || current.date;
       const targetTime = safeUpdates.startTime || current.startTime;
-      if (await db.hasActiveSlotConflict(userId, targetDate, targetTime, id)) {
+      const targetDuration = Number(safeUpdates.duration || current.duration || 30);
+      const targetEndTime = safeUpdates.endTime || addMinutesToTime(targetTime, targetDuration);
+
+      if (isPastSlot(targetDate, targetTime)) {
+        res.status(400).json({ error: "O'tib ketgan vaqtga ko'chirib bo'lmaydi" });
+        return;
+      }
+
+      if (await db.hasActiveSlotConflict(userId, targetDate, targetTime, targetEndTime, id)) {
         res.status(409).json({ error: "Ushbu vaqt oralig'i allaqachon band qilingan" });
         return;
       }
+      safeUpdates.endTime = targetEndTime;
+      safeUpdates.duration = targetDuration;
     }
 
     const updated = await db.updateAppointment(id, userId, safeUpdates);
 
-    // If client details updated, sync client entity
     if (safeUpdates.clientName || safeUpdates.clientPhone) {
       if (updated?.clientPhone) {
         await db.createOrUpdateClient(userId, updated.clientName, updated.clientPhone, 0);
@@ -236,6 +448,88 @@ router.put('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
     }
     console.error('[Appointments PUT error]:', error);
     res.status(500).json({ error: 'Bandlikni yangilashda xatolik yuz berdi' });
+  }
+});
+
+// PATCH /appointments/:id/status - Quick status update (Keldi, Tugadi, Kelmadi, Bekor)
+router.patch('/:id/status', async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.user!.userId;
+    const { id } = req.params;
+    const { status } = req.body;
+
+    const validStatuses = ['confirmed', 'arrived', 'done', 'completed', 'no_show', 'cancelled'];
+    if (!validStatuses.includes(status)) {
+      res.status(400).json({ error: "Noto'g'ri status (confirmed, arrived, done, no_show, cancelled)" });
+      return;
+    }
+
+    const normalizedStatus = status === 'done' ? 'completed' : status;
+    const updated = await db.updateAppointment(id, userId, { status: normalizedStatus as any });
+
+    if (!updated) {
+      res.status(404).json({ error: 'Bandlik topilmadi' });
+      return;
+    }
+
+    res.json({ success: true, appointment: updated });
+  } catch (error) {
+    console.error('[Appointments PATCH status error]:', error);
+    res.status(500).json({ error: 'Statusni yangilashda xatolik yuz berdi' });
+  }
+});
+
+// POST /appointments/:id/reschedule - Reschedule appointment in 2 taps
+router.post('/:id/reschedule', async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.user!.userId;
+    const { id } = req.params;
+    const { newDate, newStartTime } = req.body;
+
+    if (!newDate || !newStartTime) {
+      res.status(400).json({ error: 'Yangi sana va vaqt kiritilishi shart' });
+      return;
+    }
+
+    if (!isValidDate(newDate)) {
+      res.status(400).json({ error: "Sana formati noto'g'ri (YYYY-MM-DD)" });
+      return;
+    }
+
+    if (!isValidTime(newStartTime)) {
+      res.status(400).json({ error: "Vaqt formati noto'g'ri (HH:MM)" });
+      return;
+    }
+
+    if (isPastSlot(newDate, newStartTime)) {
+      res.status(400).json({ error: "O'tib ketgan vaqtga ko'chirib bo'lmaydi" });
+      return;
+    }
+
+    const current = await db.getAppointmentById(id, userId);
+    if (!current) {
+      res.status(404).json({ error: 'Bandlik topilmadi' });
+      return;
+    }
+
+    const duration = Number(current.duration || 30);
+    const newEndTime = addMinutesToTime(newStartTime, duration);
+
+    if (await db.hasActiveSlotConflict(userId, newDate, newStartTime, newEndTime, id)) {
+      res.status(409).json({ error: "Ushbu yangi vaqt oralig'i allaqachon band" });
+      return;
+    }
+
+    const updated = await db.updateAppointment(id, userId, {
+      date: newDate,
+      startTime: newStartTime,
+      endTime: newEndTime,
+    });
+
+    res.json({ success: true, message: 'Yozuv muvaffaqiyatli koʻchirildi', appointment: updated });
+  } catch (error) {
+    console.error('[Appointments POST reschedule error]:', error);
+    res.status(500).json({ error: 'Yozuvni koʻchirishda xatolik yuz berdi' });
   }
 });
 

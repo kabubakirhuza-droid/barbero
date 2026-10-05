@@ -15,8 +15,18 @@
     { "source": "/appointments", "destination": "/api" },
     { "source": "/services/(.*)", "destination": "/api" },
     { "source": "/services", "destination": "/api" },
+    { "source": "/working-hours/(.*)", "destination": "/api" },
+    { "source": "/working-hours", "destination": "/api" },
+    { "source": "/settings/(.*)", "destination": "/api" },
+    { "source": "/settings", "destination": "/api" },
     { "source": "/clients/(.*)", "destination": "/api" },
     { "source": "/clients", "destination": "/api" },
+    { "source": "/call-log/(.*)", "destination": "/api" },
+    { "source": "/call-log", "destination": "/api" },
+    { "source": "/blocked-slots/(.*)", "destination": "/api" },
+    { "source": "/blocked-slots", "destination": "/api" },
+    { "source": "/notifications/(.*)", "destination": "/api" },
+    { "source": "/notifications", "destination": "/api" },
     { "source": "/analytics", "destination": "/api" },
     { "source": "/portfolio/(.*)", "destination": "/api" },
     { "source": "/portfolio", "destination": "/api" },
@@ -30,8 +40,10 @@
     { "source": "/booking-requests", "destination": "/api" },
     { "source": "/reviews/(.*)", "destination": "/api" },
     { "source": "/reviews", "destination": "/api" },
+    { "source": "/legal/(.*)", "destination": "/api" },
+    { "source": "/legal", "destination": "/api" },
     {
-      "source": "/((?!api/|api$|health$|auth/|push/|appointments/|services/|clients/|analytics$|portfolio/|profile/|public/|salons/|booking-requests/|reviews/|_expo/|favicon.ico|manifest.json|sw.js).*)",
+      "source": "/((?!api/|api$|health$|auth/|push/|appointments/|services/|working-hours/|settings/|clients/|call-log/|blocked-slots/|notifications/|analytics$|portfolio/|profile/|public/|salons/|booking-requests/|reviews/|legal/|_expo/|favicon.ico|manifest.json|sw.js).*)",
       "destination": "/index.html"
     }
   ]

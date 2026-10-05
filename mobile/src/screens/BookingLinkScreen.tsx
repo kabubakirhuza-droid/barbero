@@ -59,7 +59,7 @@ export const BookingLinkScreen: React.FC<BookingLinkScreenProps> = ({
     try {
       if (typeof navigator !== 'undefined' && navigator.share) {
         await navigator.share({
-          title: "BarberPlan - Shaxsiy yozilish havolasi",
+          title: "Barbero - Shaxsiy yozilish havolasi",
           url: bookingUrl,
         });
         return;

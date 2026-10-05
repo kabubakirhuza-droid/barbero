@@ -1,13 +1,13 @@
 {
   "expo": {
-    "name": "BarberPlan",
-    "slug": "barberplan",
-    "version": "1.0.9",
+    "name": "Barbero",
+    "slug": "barbero",
+    "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "splash": {
-      "backgroundColor": "#F8FAFC"
+      "backgroundColor": "#F7F8FA"
     },
     "ios": {
       "supportsTablet": true,
@@ -15,7 +15,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#F8FAFC"
+        "backgroundColor": "#F7F8FA"
       },
       "package": "uz.barbero.app"
     },

@@ -1,10 +1,10 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
-import { Calendar, BarChart3, Image as ImageIcon, ShoppingBag, User } from 'lucide-react-native';
+import { Home, Calendar, Users, PhoneCall, User } from 'lucide-react-native';
 import { colors } from '../theme/colors';
 import { useTranslation } from '../i18n/LanguageContext';
 
-export type TabKey = 'jadval' | 'analitika' | 'portfolio' | 'profil';
+export type TabKey = 'asosiy' | 'jadval' | 'mijozlar' | 'qongiroqlar' | 'profil';
 
 interface FloatingTabBarProps {
   activeTab: TabKey;
@@ -15,10 +15,11 @@ export const FloatingTabBar: React.FC<FloatingTabBarProps> = ({ activeTab, onTab
   const { t } = useTranslation();
 
   const tabs: { key: TabKey; label: string; icon: any }[] = [
-    { key: 'jadval', label: t('tabJadval'), icon: Calendar },
-    { key: 'analitika', label: t('tabAnalitika'), icon: BarChart3 },
-    { key: 'portfolio', label: t('tabPortfolio'), icon: ImageIcon },
-    { key: 'profil', label: t('tabProfil'), icon: User },
+    { key: 'asosiy', label: t('tabAsosiy', 'Asosiy'), icon: Home },
+    { key: 'jadval', label: t('tabJadval', 'Jadval'), icon: Calendar },
+    { key: 'mijozlar', label: t('tabMijozlar', 'Mijozlar'), icon: Users },
+    { key: 'qongiroqlar', label: t('tabQongiroqlar', 'Qo\'ng\'iroqlar'), icon: PhoneCall },
+    { key: 'profil', label: t('tabProfil', 'Profil'), icon: User },
   ];
 
   return (
@@ -37,9 +38,9 @@ export const FloatingTabBar: React.FC<FloatingTabBarProps> = ({ activeTab, onTab
             >
               <View style={[styles.iconWrapper, isActive && styles.activeIconWrapper]}>
                 <IconComponent
-                  size={22}
+                  size={20}
                   color={isActive ? colors.primary : colors.textSecondary}
-                  strokeWidth={isActive ? 2.3 : 1.8}
+                  strokeWidth={isActive ? 2.4 : 1.8}
                 />
               </View>
               <Text
@@ -62,26 +63,26 @@ export const FloatingTabBar: React.FC<FloatingTabBarProps> = ({ activeTab, onTab
 const styles = StyleSheet.create({
   floatingWrapper: {
     position: 'absolute',
-    bottom: Platform.OS === 'ios' ? 24 : 16,
-    left: 16,
-    right: 16,
+    bottom: Platform.OS === 'ios' ? 20 : 12,
+    left: 12,
+    right: 12,
     alignItems: 'center',
     zIndex: 99,
   },
   container: {
     flexDirection: 'row',
     width: '100%',
-    maxWidth: 480,
+    maxWidth: 520,
     backgroundColor: '#FFFFFF',
-    borderRadius: 30,
-    paddingVertical: 10,
-    paddingHorizontal: 8,
+    borderRadius: 28,
+    paddingVertical: 8,
+    paddingHorizontal: 6,
     borderWidth: 1,
-    borderColor: colors.cardBorder,
-    shadowColor: colors.shadowColor,
-    shadowOffset: { width: 0, height: 6 },
+    borderColor: '#E2E8F0',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.12,
-    shadowRadius: 16,
+    shadowRadius: 14,
     elevation: 8,
     justifyContent: 'space-around',
     alignItems: 'center',
@@ -93,14 +94,14 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   iconWrapper: {
-    padding: 4,
-    borderRadius: 12,
+    padding: 3,
+    borderRadius: 10,
   },
   activeIconWrapper: {
     backgroundColor: colors.primaryLight,
   },
   tabLabel: {
-    fontSize: 11,
+    fontSize: 10,
     marginTop: 2,
     fontWeight: '500',
   },
@@ -110,6 +111,5 @@ const styles = StyleSheet.create({
   },
   inactiveTabLabel: {
     color: colors.textSecondary,
-    fontWeight: '500',
   },
 });

@@ -200,6 +200,11 @@ class ApiClient {
   }
 
   // --- Appointments ---
+  async getTodaySchedule(date?: string): Promise<any> {
+    const query = date ? `?date=${date}` : '';
+    return this.request(`/appointments/today${query}`);
+  }
+
   async getAppointments(date?: string): Promise<{ appointments: Appointment[]; dayTotal: number; count: number }> {
     const query = date ? `?date=${date}` : '';
     return this.request(`/appointments${query}`);
@@ -212,10 +217,24 @@ class ApiClient {
     });
   }
 
-  async quickBook(date: string, startTime: string): Promise<{ success: boolean; appointment: Appointment }> {
+  async quickBook(
+    dataOrDate: { date?: string; startTime?: string; phone?: string; name?: string; serviceId?: string; duration?: number; isWalkIn?: boolean; notes?: string } | string,
+    legacyStartTime?: string
+  ): Promise<{ success: boolean; message?: string; appointment: Appointment }> {
+    const body = typeof dataOrDate === 'string'
+      ? { date: dataOrDate, startTime: legacyStartTime }
+      : dataOrDate;
+
     return this.request('/appointments/quick', {
       method: 'POST',
-      body: JSON.stringify({ date, startTime }),
+      body: JSON.stringify(body),
+    });
+  }
+
+  async repeatBooking(data: { clientId?: string; phone?: string; date: string; startTime: string }): Promise<{ success: boolean; message: string; appointment: Appointment }> {
+    return this.request('/appointments/repeat', {
+      method: 'POST',
+      body: JSON.stringify(data),
     });
   }
 
@@ -233,6 +252,21 @@ class ApiClient {
   }
 
   // --- Clients ---
+  async searchClientByPhone(phone: string): Promise<{ success: boolean; found: boolean; client?: any; normalizedPhone: string }> {
+    return this.request(`/clients/search?phone=${encodeURIComponent(phone)}`);
+  }
+
+  async getClientHistory(clientId: string): Promise<{ success: boolean; client: any; history: any[] }> {
+    return this.request(`/clients/${clientId}/history`);
+  }
+
+  async quickClient(phone: string, name?: string, notes?: string): Promise<{ success: boolean; client: any }> {
+    return this.request('/clients/quick', {
+      method: 'POST',
+      body: JSON.stringify({ phone, name, notes }),
+    });
+  }
+
   async getClients(): Promise<{ clients: any[] }> {
     return this.request('/clients');
   }
@@ -468,6 +502,85 @@ class ApiClient {
 
   async getPushStatus(): Promise<{ active: boolean; isSubscribed: boolean; count: number; subscriptionsCount: number; subscriptions: any[] }> {
     return this.request('/push/status');
+  }
+
+  // --- Call Log ---
+  async getCallLogs(limit: number = 20): Promise<{ success: boolean; callLogs: any[]; count: number }> {
+    return this.request(`/call-log?limit=${limit}`);
+  }
+
+  async addCallLog(phone: string, name?: string, direction: string = 'outgoing_call'): Promise<{ success: boolean; callLog: any }> {
+    return this.request('/call-log', {
+      method: 'POST',
+      body: JSON.stringify({ phone, name, direction }),
+    });
+  }
+
+  // --- Blocked Slots (Dam olish) ---
+  async getBlockedSlots(date?: string): Promise<{ success: boolean; blockedSlots: any[]; count: number }> {
+    const query = date ? `?date=${date}` : '';
+    return this.request(`/blocked-slots${query}`);
+  }
+
+  async createBlockedSlot(slot: { appointmentDate: string; startTime: string; endTime?: string; reason?: string }): Promise<{ success: boolean; blockedSlot: any }> {
+    return this.request('/blocked-slots', {
+      method: 'POST',
+      body: JSON.stringify(slot),
+    });
+  }
+
+  async deleteBlockedSlot(id: string): Promise<{ success: boolean }> {
+    return this.request(`/blocked-slots/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  // --- Appointment Status & Reschedule ---
+  async updateAppointmentStatus(id: string, status: string): Promise<{ success: boolean; appointment: Appointment }> {
+    return this.request(`/appointments/${id}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    });
+  }
+
+  async rescheduleAppointment(id: string, newDate: string, newStartTime: string): Promise<{ success: boolean; appointment: Appointment }> {
+    return this.request(`/appointments/${id}/reschedule`, {
+      method: 'POST',
+      body: JSON.stringify({ newDate, newStartTime }),
+    });
+  }
+
+  // --- Legal Documents ---
+  async getLegalDocuments(): Promise<{ success: boolean; documents: any[] }> {
+    return this.request('/legal');
+  }
+
+  async getLegalDocument(slug: string): Promise<{ success: boolean; document: any }> {
+    return this.request(`/legal/${slug}`);
+  }
+
+  async acceptLegalDocument(slug: string, version?: string): Promise<{ success: boolean }> {
+    return this.request('/legal/accept', {
+      method: 'POST',
+      body: JSON.stringify({ slug, version: version || '1.0' }),
+    });
+  }
+
+  // --- Notifications ---
+  async getNotifications(): Promise<{ success: boolean; notifications: any[]; count: number; unreadCount: number }> {
+    return this.request('/notifications');
+  }
+
+  async markNotificationRead(id: string): Promise<{ success: boolean }> {
+    return this.request(`/notifications/${id}/read`, {
+      method: 'PATCH',
+    });
+  }
+
+  async markAllNotificationsRead(): Promise<{ success: boolean }> {
+    return this.request('/notifications/read-all', {
+      method: 'POST',
+    });
   }
 }
 

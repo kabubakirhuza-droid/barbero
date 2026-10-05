@@ -56,12 +56,12 @@ function distToRing(px, py, cx, cy, radius, thickness) {
 }
 
 /**
- * Renders the BarberPlan emblem: crossed barber scissors, gold pivot screw, and clean BARBERPLAN typography
+ * Renders the Barbero emblem: crossed barber scissors, gold pivot screw, and clean BARBERO typography
  * @param {number} width 
  * @param {number} height 
  * @param {boolean} isMaskable If true, keeps content inside 80% safe zone with full solid bleed
  */
-function renderBarberPlanIcon(width, height, isMaskable = false) {
+function renderBarberoIcon(width, height, isMaskable = false) {
   const signature = Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]);
 
   const ihdrData = Buffer.alloc(13);
@@ -126,7 +126,6 @@ function renderBarberPlanIcon(width, height, isMaskable = false) {
       }
 
       // --- DRAW EMBLEM (Barber Scissors) ---
-      // Pivot is at (0, -0.05) or centered for small favicon
       const pivotX = 0;
       const pivotY = isSmallFavicon ? 0.0 : -0.06;
 
@@ -165,16 +164,16 @@ function renderBarberPlanIcon(width, height, isMaskable = false) {
         dTang - 0.035
       );
 
-      // --- TEXT "BARBERPLAN" AT BOTTOM (for large icons >= 180px) ---
+      // --- TEXT "BARBERO" AT BOTTOM (for large icons >= 180px) ---
       let isText = false;
       if (width >= 180 && ny >= 0.68 && ny <= 0.88 && Math.abs(nx) <= 0.90) {
-        // 10 letters: B A R B E R P L A N
-        const letters = [-0.74, -0.58, -0.42, -0.25, -0.09, 0.07, 0.24, 0.40, 0.57, 0.74];
+        // 7 letters: B A R B E R O
+        const letters = [-0.60, -0.40, -0.20, 0.0, 0.20, 0.40, 0.60];
         const textY1 = 0.70;
         const textY2 = 0.86;
         const textMidY = 0.78;
-        const charW = 0.085;
-        const strokeThick = 0.022;
+        const charW = 0.10;
+        const strokeThick = 0.024;
 
         for (let i = 0; i < letters.length; i++) {
           const lX = letters[i];
@@ -190,8 +189,8 @@ function renderBarberPlanIcon(width, height, isMaskable = false) {
                 isText = true;
               }
             }
-            // 'A' (index 1 and 8)
-            else if (i === 1 || i === 8) {
+            // 'A' (index 1)
+            else if (i === 1) {
               const leg1 = distToSegment(nx, ny, lX, textY1, lX - charW/2, textY2);
               const leg2 = distToSegment(nx, ny, lX, textY1, lX + charW/2, textY2);
               const cross = distToSegment(nx, ny, lX - charW/3, textMidY, lX + charW/3, textMidY);
@@ -214,26 +213,10 @@ function renderBarberPlanIcon(width, height, isMaskable = false) {
               const bBar = distToSegment(nx, ny, lX - charW/2, textY2, lX + charW/2, textY2);
               if (Math.min(spine, tBar, mBar, bBar) <= strokeThick/2) isText = true;
             }
-            // 'P' (index 6)
+            // 'O' (index 6)
             else if (i === 6) {
-              const spine = distToSegment(nx, ny, lX - charW/2, textY1, lX - charW/2, textY2);
-              const topLoop = distToRing(nx, ny, lX - 0.01, textY1 + 0.04, 0.038, strokeThick);
-              if (spine <= strokeThick/2 || (topLoop <= 0 && cnx >= -charW/2)) {
-                isText = true;
-              }
-            }
-            // 'L' (index 7)
-            else if (i === 7) {
-              const spine = distToSegment(nx, ny, lX - charW/2, textY1, lX - charW/2, textY2);
-              const bBar = distToSegment(nx, ny, lX - charW/2, textY2, lX + charW/2, textY2);
-              if (Math.min(spine, bBar) <= strokeThick/2) isText = true;
-            }
-            // 'N' (index 9)
-            else if (i === 9) {
-              const s1 = distToSegment(nx, ny, lX - charW/2, textY1, lX - charW/2, textY2);
-              const s2 = distToSegment(nx, ny, lX + charW/2, textY1, lX + charW/2, textY2);
-              const diag = distToSegment(nx, ny, lX - charW/2, textY1, lX + charW/2, textY2);
-              if (Math.min(s1, s2, diag) <= strokeThick/2) isText = true;
+              const ringO = distToRing(nx, ny, lX, textMidY, 0.065, strokeThick);
+              if (ringO <= 0) isText = true;
             }
           }
         }
@@ -299,12 +282,12 @@ const iconsToGenerate = [
   { name: 'logo.png', size: 512, isMaskable: false },
 ];
 
-console.log('🎨 Generating authentic BarberPlan Scissors PNG icon suite...');
+console.log('🎨 Generating authentic Barbero Scissors PNG icon suite...');
 for (const icon of iconsToGenerate) {
-  const iconBuffer = renderBarberPlanIcon(icon.size, icon.size, icon.isMaskable);
+  const iconBuffer = renderBarberoIcon(icon.size, icon.size, icon.isMaskable);
   const targetPath = path.join(publicDir, icon.name);
   fs.writeFileSync(targetPath, iconBuffer);
   console.log(` ✓ ${icon.name} (${icon.size}x${icon.size}${icon.isMaskable ? ' maskable' : ''}) -> ${iconBuffer.length} bytes`);
 }
 
-console.log('✅ BarberPlan icon suite generated successfully!');
+console.log('✅ Barbero icon suite generated successfully!');

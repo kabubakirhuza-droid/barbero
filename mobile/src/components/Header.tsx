@@ -1,51 +1,76 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
-import { Bell, Calendar as CalendarIcon } from 'lucide-react-native';
-import { colors } from '../theme/colors';
+import { Bell, Inbox, Calendar as CalendarIcon } from 'lucide-react-native';
+import { colors } from '../theme/theme';
 import { BarberoLogo } from './BarberoLogo';
 
 interface HeaderProps {
   onCalendarPress?: () => void;
   onNotificationPress?: () => void;
+  onRequestsPress?: () => void;
   hasNotification?: boolean;
   unreadCount?: number;
+  requestsCount?: number;
 }
 
 export const Header: React.FC<HeaderProps> = ({
   onCalendarPress,
   onNotificationPress,
-  hasNotification = true,
-  unreadCount = 2,
+  onRequestsPress,
+  hasNotification = false,
+  unreadCount = 0,
+  requestsCount = 0,
 }) => {
   return (
     <View style={styles.container}>
-      {/* Brand Logo with golden 'B' emblem and title */}
+      {/* Brand Logo with golden/blue emblem and title */}
       <View style={styles.logoContainer}>
         <BarberoLogo size="md" showSubtitle={true} />
       </View>
 
-      {/* Right Action Icons: Bell & Calendar */}
+      {/* Right Action Icons: So'rovlar & Bell & Jadval */}
       <View style={styles.actionsContainer}>
+        {/* So'rovlar (Booking requests with badge) */}
         <TouchableOpacity
           style={styles.iconButton}
-          onPress={onNotificationPress}
+          onPress={onRequestsPress}
           activeOpacity={0.7}
+          accessibilityLabel="So'rovlar"
         >
-          <Bell size={20} color={colors.textPrimary} />
-          {hasNotification && (
-            <View style={styles.notificationBadge}>
-              <Text style={styles.badgeCountText}>{unreadCount}</Text>
+          <Inbox size={20} color={colors.textPrimary} />
+          {requestsCount > 0 && (
+            <View style={styles.requestsBadge}>
+              <Text style={styles.badgeCountText}>{requestsCount}</Text>
             </View>
           )}
         </TouchableOpacity>
 
+        {/* Bildirishnomalar (Bell with badge) */}
         <TouchableOpacity
           style={styles.iconButton}
-          onPress={onCalendarPress}
+          onPress={onNotificationPress}
           activeOpacity={0.7}
+          accessibilityLabel="Bildirishnomalar"
         >
-          <CalendarIcon size={20} color={colors.textPrimary} />
+          <Bell size={20} color={colors.textPrimary} />
+          {(hasNotification || unreadCount > 0) && (
+            <View style={styles.notificationBadge}>
+              <Text style={styles.badgeCountText}>{unreadCount > 0 ? unreadCount : ''}</Text>
+            </View>
+          )}
         </TouchableOpacity>
+
+        {/* Jadval quick jump */}
+        {onCalendarPress && (
+          <TouchableOpacity
+            style={styles.iconButton}
+            onPress={onCalendarPress}
+            activeOpacity={0.7}
+            accessibilityLabel="Jadval"
+          >
+            <CalendarIcon size={20} color={colors.textPrimary} />
+          </TouchableOpacity>
+        )}
       </View>
     </View>
   );
@@ -71,12 +96,12 @@ const styles = StyleSheet.create({
   actionsContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 8,
   },
   iconButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     backgroundColor: colors.card,
     alignItems: 'center',
     justifyContent: 'center',
@@ -93,10 +118,24 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: -2,
     right: -2,
-    minWidth: 17,
-    height: 17,
-    borderRadius: 8.5,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
     backgroundColor: colors.danger,
+    borderWidth: 1.5,
+    borderColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+  },
+  requestsBadge: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: colors.primary,
     borderWidth: 1.5,
     borderColor: '#FFFFFF',
     alignItems: 'center',

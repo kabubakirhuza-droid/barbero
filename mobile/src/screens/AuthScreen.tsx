@@ -10,6 +10,7 @@ import {
   ScrollView,
   ActivityIndicator,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   X,
   ChevronLeft,
@@ -207,15 +208,22 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
     try {
       const res = await api.verifyCode(fullPhoneE164, codeToVerify, requestId);
 
+      const resolvedName = (ism.trim() || res?.user?.ism || res?.user?.name || (role === 'CLIENT' ? 'Mijoz' : 'Usta')).trim();
+      await AsyncStorage.setItem('barbero_client_name', resolvedName).catch(() => {});
+      await AsyncStorage.setItem('barbero_client_phone', fullPhoneE164).catch(() => {});
+      await AsyncStorage.setItem('app_user_name', resolvedName).catch(() => {});
+      await AsyncStorage.setItem('app_user_phone', fullPhoneE164).catch(() => {});
+      await AsyncStorage.setItem('app_user_role', role).catch(() => {});
+
       // If user exists and is in login mode or has full name:
-      if (mode === 'login' && res?.user?.ism) {
+      if (mode === 'login' && (res?.user?.ism || res?.user?.name)) {
         onSuccess();
         return;
       }
 
       // If in register mode or profile needs to be saved:
-      const nameToSave = ism.trim() || res?.user?.ism || 'Foydalanuvchi';
-      const surNameToSave = familiya.trim() || res?.user?.familiya || 'BarberPlan';
+      const nameToSave = ism.trim() || res?.user?.ism || res?.user?.name || 'Foydalanuvchi';
+      const surNameToSave = familiya.trim() || res?.user?.familiya || 'Barbero';
 
       await api.registerProfile(
         nameToSave,
@@ -301,7 +309,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
 
   // Create New Salon
   const handleCreateSalon = async () => {
-    const name = newSalonName.trim() || `${ism || 'BarberPlan'} Sartaroshxonasi`;
+    const name = newSalonName.trim() || `${ism || 'Barbero'} Sartaroshxonasi`;
     setLoading(true);
     try {
       await api.createSalon({
@@ -541,7 +549,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
           <View style={styles.titlesArea}>
             <Text style={styles.mainTitle}>{t('smsVerifyTitle')}</Text>
             <Text style={styles.subTitle}>
-              Biz {getMaskedPhoneDisplay()} raqamingizga 6 xonali tasdiqlash kodini yubordik…
+              {getMaskedPhoneDisplay()} raqamingizga bog'langan Telegram ilovasiga 6 xonali tasdiqlash kodi yuborildi.
             </Text>
           </View>
 

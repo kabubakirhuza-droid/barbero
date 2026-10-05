@@ -32,7 +32,8 @@ export const WorkingHoursScreen: React.FC<WorkingHoursScreenProps> = ({ onBack }
     { id: '7', dayOfWeek: 'Yakshanba', dayIndex: 7, isWorking: false, startTime: '09:00', endTime: '21:00', lunchStart: '13:00', lunchEnd: '14:00' },
   ]);
 
-  const toggleDay = (id: string) => {
+  const toggleDay = (id?: string) => {
+    if (!id) return;
     setDays((prev) =>
       prev.map((d) => (d.id === id ? { ...d, isWorking: !d.isWorking } : d))
     );

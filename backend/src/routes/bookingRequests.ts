@@ -1,14 +1,19 @@
 import { Router, Request, Response } from 'express';
-import { db, BookingRequest, Appointment } from '../db';
+import { db, BookingRequest, Appointment, addMinutesToTime, getTashkentNow } from '../db';
 import { pushService } from '../pushService';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
+import { config } from '../config';
 
 const router = Router();
 
-// GET /booking-requests - List of booking requests for logged-in master
+// GET /booking-requests - List of booking requests for logged-in master (auto-expires stale requests)
 router.get('/', authenticateToken, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const masterId = req.user!.userId;
+
+    // Check & expire stale pending requests automatically on every query
+    await db.expirePendingBookingRequests(config.requestTtlMinutes || 30);
+
     const requests = await db.getBookingRequests(masterId);
 
     res.json({
@@ -52,6 +57,9 @@ function checkRateLimit(ip: string, phone: string): boolean {
 // POST /booking-requests - Client submits request from public booking page
 router.post('/', async (req: Request, res: Response): Promise<void> => {
   try {
+    // Check & expire stale requests
+    await db.expirePendingBookingRequests(config.requestTtlMinutes || 30);
+
     const { masterId, clientName, clientPhone, serviceId, date, time } = req.body;
 
     if (!masterId || !clientName || !clientPhone || !serviceId || !date || !time) {
@@ -59,13 +67,13 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    const trimmedName = String(clientName).trim();
+    const trimmedName = String(clientName).trim().slice(0, 100);
     if (trimmedName.length < 2) {
       res.status(400).json({ error: "Mijoz ismi kamida 2 ta harfdan iborat bo'lishi kerak" });
       return;
     }
 
-    // Phone validation
+    // Phone validation (+998XXXXXXXXX)
     let cleanPhone = String(clientPhone).replace(/\D/g, '');
     if (cleanPhone.length === 9) cleanPhone = `998${cleanPhone}`;
     if (!/^998\d{9}$/.test(cleanPhone)) {
@@ -79,20 +87,16 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       res.status(400).json({ error: "Sana formati noto'g'ri (YYYY-MM-DD)" });
       return;
     }
-    const today = new Date().toISOString().split('T')[0];
-    if (String(date) < today) {
-      res.status(400).json({ error: "O'tgan sanaga yozilish mumkin emas" });
-      return;
-    }
 
     // Time validation
-    if (!/^\d{2}:\d{2}$/.test(String(time))) {
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(String(time))) {
       res.status(400).json({ error: "Vaqt formati noto'g'ri (HH:MM)" });
       return;
     }
-    const [hours, mins] = String(time).split(':').map(Number);
-    if (hours < 7 || hours > 23 || mins < 0 || mins > 59) {
-      res.status(400).json({ error: "Kiritilgan vaqt ish vaqtidan tashqarida (07:00 - 23:00)" });
+
+    const { dateStr: todayStr, timeStr: nowTimeStr } = getTashkentNow();
+    if (String(date) < todayStr || (String(date) === todayStr && String(time) < nowTimeStr)) {
+      res.status(400).json({ error: "O'tib ketgan sanaga yozilish mumkin emas" });
       return;
     }
 
@@ -120,8 +124,11 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    // Check slot availability
-    if (await db.hasActiveSlotConflict(master.id, String(date), String(time))) {
+    const duration = service.duration || 30;
+    const endTime = addMinutesToTime(String(time), duration);
+
+    // Check slot availability with interval overlap
+    if (await db.hasActiveSlotConflict(master.id, String(date), String(time), endTime)) {
       res.status(409).json({ error: "Ushbu vaqt oralig'ida allaqachon boshqa qabul mavjud" });
       return;
     }
@@ -137,13 +144,25 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       badgeColor: service.badgeColor || '#2563EB',
       date: String(date),
       time: String(time),
-      duration: service.duration || 30,
+      duration,
       status: 'pending',
     };
 
     const savedRequest = await db.createBookingRequest(newRequest);
 
-    // Send Push Notification to master
+    // Add entry to call log for master
+    await db.addCallLog(master.id, formattedPhone, trimmedName, 'booking_request').catch(() => {});
+
+    // Create in-app notification
+    await db.createNotification({
+      userId: master.id,
+      type: 'booking_request',
+      title: `Yangi so'rov: ${savedRequest.clientName}`,
+      body: `${savedRequest.serviceName} • ${date}, soat ${time}`,
+      data: { requestId: savedRequest.id },
+    }).catch(() => {});
+
+    // Send Web Push Notification to master
     try {
       await pushService.sendNotificationToUser(master.id, {
         title: `Yangi so'rov: ${savedRequest.clientName}`,
@@ -180,25 +199,23 @@ router.post('/:id/accept', authenticateToken, async (req: AuthRequest, res: Resp
       return;
     }
 
-    // Check double booking
-    if (await db.hasActiveSlotConflict(masterId, request.date, request.time)) {
+    const duration = request.duration || 30;
+    const endTime = addMinutesToTime(request.time, duration);
+
+    // Check interval conflict
+    if (await db.hasActiveSlotConflict(masterId, request.date, request.time, endTime)) {
       res.status(409).json({ error: "Ushbu vaqt oralig'ida allaqachon boshqa qabul mavjud" });
       return;
     }
 
     await db.updateBookingRequestStatus(id, 'accepted');
 
-    // Calculate end time
-    const [h, m] = request.time.split(':').map(Number);
-    const totalM = (h || 9) * 60 + (m || 0) + (request.duration || 30);
-    const endTime = `${String(Math.floor(totalM / 60) % 24).padStart(2, '0')}:${String(totalM % 60).padStart(2, '0')}`;
-
     const client = await db.createOrUpdateClient(masterId, request.clientName, request.clientPhone, request.servicePrice);
 
     const newAppointment: Appointment = {
       id: `apt-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
       userId: masterId,
-      clientId: client.id,
+      clientId: client?.id,
       clientName: request.clientName,
       clientPhone: request.clientPhone,
       serviceId: request.serviceId,
@@ -208,15 +225,35 @@ router.post('/:id/accept', authenticateToken, async (req: AuthRequest, res: Resp
       date: request.date,
       startTime: request.time,
       endTime,
-      duration: request.duration || 30,
+      duration,
       status: 'confirmed',
     };
 
     await db.createAppointment(newAppointment);
 
+    // If client is a registered user, send push
+    const clientUser = await db.getUserByPhone(request.clientPhone);
+    if (clientUser) {
+      await db.createNotification({
+        userId: clientUser.id,
+        type: 'booking_accepted',
+        title: 'Qabulingiz tasdiqlandi! 🎉',
+        body: `${request.date} soat ${request.time} ga yozuv tasdiqlandi.`,
+        data: { appointmentId: newAppointment.id },
+      }).catch(() => {});
+
+      try {
+        await pushService.sendNotificationToUser(clientUser.id, {
+          title: 'Qabulingiz tasdiqlandi! 🎉',
+          body: `${request.date} soat ${request.time} ga yozuv tasdiqlandi.`,
+          data: { screen: 'myAppointments', url: '/yozuvlarim' },
+        });
+      } catch (_) {}
+    }
+
     res.json({
       success: true,
-      message: "So'rov qabul qilindi va jadvalga qo'shildi",
+      message: "So'rov tasdiqlandi va jadvalga qo'shildi",
       appointment: newAppointment,
     });
   } catch (error: any) {
@@ -224,8 +261,8 @@ router.post('/:id/accept', authenticateToken, async (req: AuthRequest, res: Resp
       res.status(409).json({ error: "Ushbu vaqt oralig'ida allaqachon boshqa qabul mavjud" });
       return;
     }
-    console.error('[BookingRequests accept POST error]:', error);
-    res.status(500).json({ error: 'Soʻrovni qabul qilishda xatolik yuz berdi' });
+    console.error('[BookingRequests accept error]:', error);
+    res.status(500).json({ error: "So'rovni qabul qilishda xatolik yuz berdi" });
   }
 });
 
@@ -243,13 +280,33 @@ router.post('/:id/reject', authenticateToken, async (req: AuthRequest, res: Resp
 
     await db.updateBookingRequestStatus(id, 'rejected');
 
+    // If client is a registered user, send push & in-app notification
+    const clientUser = await db.getUserByPhone(request.clientPhone);
+    if (clientUser) {
+      await db.createNotification({
+        userId: clientUser.id,
+        type: 'booking_rejected',
+        title: "So'rovingiz rad etildi",
+        body: `${request.date} soat ${request.time} dagi vaqt band yoki bekor qilindi.`,
+        data: { requestId: id },
+      }).catch(() => {});
+
+      try {
+        await pushService.sendNotificationToUser(clientUser.id, {
+          title: "So'rovingiz rad etildi",
+          body: `${request.date} soat ${request.time} dagi vaqt band yoki bekor qilindi.`,
+          data: { screen: 'myAppointments', url: '/yozuvlarim' },
+        });
+      } catch (_) {}
+    }
+
     res.json({
       success: true,
       message: "So'rov rad etildi",
     });
   } catch (error) {
-    console.error('[BookingRequests reject POST error]:', error);
-    res.status(500).json({ error: 'Soʻrovni rad etishda xatolik yuz berdi' });
+    console.error('[BookingRequests reject error]:', error);
+    res.status(500).json({ error: "So'rovni rad etishda xatolik yuz berdi" });
   }
 });
 
