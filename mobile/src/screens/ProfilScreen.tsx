@@ -31,6 +31,8 @@ import {
   Star,
   UserCheck,
   RotateCcw,
+  BarChart3,
+  Image as ImageIcon,
 } from 'lucide-react-native';
 import { colors, COLOR_PRIMARY } from '../theme/theme';
 import { useTranslation } from '../i18n/LanguageContext';
@@ -44,6 +46,8 @@ import { SecurityScreen } from './SecurityScreen';
 import { MySalonScreen } from './MySalonScreen';
 import { BookingRequestsScreen } from './BookingRequestsScreen';
 import { ServicesScreen } from './ServicesScreen';
+import { AnalitikaScreen } from './AnalitikaScreen';
+import { PortfolioScreen } from './PortfolioScreen';
 import { PublicBookingPreviewModal } from './PublicBookingPreviewModal';
 import { ReviewsListModal } from '../components/ReviewsListModal';
 import { InactiveClientsModal } from '../components/InactiveClientsModal';
@@ -66,7 +70,9 @@ type SubScreen =
   | 'language'
   | 'security'
   | 'mySalon'
-  | 'bookingRequests';
+  | 'bookingRequests'
+  | 'analitika'
+  | 'portfolio';
 
 export const ProfilScreen: React.FC<ProfilScreenProps> = ({ onLogout, onOpenAddService }) => {
   const { t, language } = useTranslation();
@@ -169,6 +175,36 @@ export const ProfilScreen: React.FC<ProfilScreenProps> = ({ onLogout, onOpenAddS
 
   if (activeSubScreen === 'security') {
     return <SecurityScreen onBack={() => setActiveSubScreen(null)} />;
+  }
+
+  if (activeSubScreen === 'analitika') {
+    return (
+      <View style={{ flex: 1, backgroundColor: colors.background }}>
+        <TouchableOpacity
+          style={{ flexDirection: 'row', alignItems: 'center', padding: 16, backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: '#F1F5F9' }}
+          onPress={() => setActiveSubScreen(null)}
+        >
+          <ChevronRight size={20} color={COLOR_PRIMARY} style={{ transform: [{ rotate: '180deg' }], marginRight: 6 }} />
+          <Text style={{ fontSize: 16, fontWeight: '700', color: COLOR_PRIMARY }}>Profilga qaytish</Text>
+        </TouchableOpacity>
+        <AnalitikaScreen />
+      </View>
+    );
+  }
+
+  if (activeSubScreen === 'portfolio') {
+    return (
+      <View style={{ flex: 1, backgroundColor: colors.background }}>
+        <TouchableOpacity
+          style={{ flexDirection: 'row', alignItems: 'center', padding: 16, backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: '#F1F5F9' }}
+          onPress={() => setActiveSubScreen(null)}
+        >
+          <ChevronRight size={20} color={COLOR_PRIMARY} style={{ transform: [{ rotate: '180deg' }], marginRight: 6 }} />
+          <Text style={{ fontSize: 16, fontWeight: '700', color: COLOR_PRIMARY }}>Profilga qaytish</Text>
+        </TouchableOpacity>
+        <PortfolioScreen />
+      </View>
+    );
   }
 
   return (
@@ -369,6 +405,40 @@ export const ProfilScreen: React.FC<ProfilScreenProps> = ({ onLogout, onOpenAddS
                 <Text style={styles.soonBadgeText}>{t('soon')}</Text>
               </View>
             </View>
+
+            <View style={styles.menuDivider} />
+
+            {/* Analitika va tushumlar */}
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => setActiveSubScreen('analitika')}
+              activeOpacity={0.7}
+            >
+              <View style={styles.menuItemLeft}>
+                <View style={[styles.menuIconWrap, { backgroundColor: '#EFF6FF' }]}>
+                  <BarChart3 size={20} color="#2563EB" />
+                </View>
+                <Text style={styles.menuItemLabel}>Analitika va tushumlar</Text>
+              </View>
+              <ChevronRight size={18} color={colors.textMuted} />
+            </TouchableOpacity>
+
+            <View style={styles.menuDivider} />
+
+            {/* Portfolio */}
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => setActiveSubScreen('portfolio')}
+              activeOpacity={0.7}
+            >
+              <View style={styles.menuItemLeft}>
+                <View style={[styles.menuIconWrap, { backgroundColor: '#F0FDF4' }]}>
+                  <ImageIcon size={20} color="#16A34A" />
+                </View>
+                <Text style={styles.menuItemLabel}>Portfolio va namunalar</Text>
+              </View>
+              <ChevronRight size={18} color={colors.textMuted} />
+            </TouchableOpacity>
           </View>
         </View>
 

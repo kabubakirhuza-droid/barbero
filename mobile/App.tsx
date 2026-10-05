@@ -19,7 +19,10 @@ import { AnimatedSplashScreen } from './src/components/AnimatedSplashScreen';
 import { OnboardingScreen } from './src/screens/OnboardingScreen';
 import { RoleSelectionScreen } from './src/screens/RoleSelectionScreen';
 import { AuthScreen } from './src/screens/AuthScreen';
+import { WorkdayScreen } from './src/screens/WorkdayScreen';
 import { JadvalScreen } from './src/screens/JadvalScreen';
+import { ClientsScreen } from './src/screens/ClientsScreen';
+import { CallLogScreen } from './src/screens/CallLogScreen';
 import { AnalitikaScreen } from './src/screens/AnalitikaScreen';
 import { PortfolioScreen } from './src/screens/PortfolioScreen';
 import { ProfilScreen } from './src/screens/ProfilScreen';
@@ -45,8 +48,8 @@ function MainApp() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const [userRole, setUserRole] = useState<UserRole | null>(null);
 
-  // Master dashboard state
-  const [activeTab, setActiveTab] = useState<TabKey>('jadval');
+  // Master dashboard state (default to 'asosiy' for 1-screen workday focus!)
+  const [activeTab, setActiveTab] = useState<TabKey>('asosiy');
   const [isAddServiceModalVisible, setIsAddServiceModalVisible] = useState(false);
   const [isNotificationsVisible, setIsNotificationsVisible] = useState(false);
   const [isRequestsVisible, setIsRequestsVisible] = useState(false);
@@ -290,11 +293,12 @@ function MainApp() {
 
       {/* Main Tab Screen Content */}
       <View style={[styles.contentArea, { backgroundColor: currentColors.background }]}>
+        {activeTab === 'asosiy' && <WorkdayScreen />}
         {activeTab === 'jadval' && (
           <JadvalScreen onAddServicePress={() => setIsAddServiceModalVisible(true)} />
         )}
-        {activeTab === 'analitika' && <AnalitikaScreen />}
-        {activeTab === 'portfolio' && <PortfolioScreen />}
+        {activeTab === 'mijozlar' && <ClientsScreen />}
+        {activeTab === 'qongiroqlar' && <CallLogScreen />}
         {activeTab === 'profil' && (
           <ProfilScreen
             onLogout={handleLogout}
@@ -303,7 +307,7 @@ function MainApp() {
         )}
       </View>
 
-      {/* 4-Tab Floating Nav Bar */}
+      {/* 5-Tab Floating Nav Bar */}
       <FloatingTabBar activeTab={activeTab} onTabPress={setActiveTab} />
 
       {/* Modal: So'rovlar (Booking requests) */}

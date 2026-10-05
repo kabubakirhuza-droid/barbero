@@ -1,5 +1,5 @@
 import { Router, Response } from 'express';
-import { db } from '../db';
+import { db, normalizeUzbekPhone } from '../db';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 
 const router = Router();
@@ -7,7 +7,7 @@ const router = Router();
 // Require auth on all call-log routes (only master sees their own call log)
 router.use(authenticateToken);
 
-// GET /call-log?limit=20 - Return last 20 unique callers from past 30 days
+// GET /call-log?limit=20 - Return last 20 unique callers from past 30 days with enriched client info
 router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const userId = req.user!.userId;
@@ -26,14 +26,8 @@ router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
   }
 });
 
-// Helper to normalize and validate Uzbekistan phone
-export function normalizeUzPhone(raw: string): string {
-  let digits = String(raw || '').replace(/\D/g, '');
-  if (digits.length === 9) {
-    digits = `998${digits}`;
-  }
-  return `+${digits}`;
-}
+// Helper export for backward compatibility
+export { normalizeUzbekPhone as normalizeUzPhone };
 
 // POST /call-log - Record outgoing or incoming manual call
 router.post('/', async (req: AuthRequest, res: Response): Promise<void> => {
@@ -46,17 +40,26 @@ router.post('/', async (req: AuthRequest, res: Response): Promise<void> => {
       return;
     }
 
-    const normalizedPhone = normalizeUzPhone(phone);
+    const normalizedPhone = normalizeUzbekPhone(phone);
     if (!/^\+998\d{9}$/.test(normalizedPhone)) {
       res.status(400).json({ error: "Telefon raqami noto'g'ri. +998XXXXXXXXX formatida kiriting (masalan, +998901234567)" });
       return;
     }
 
-    const cleanName = name ? String(name).trim().slice(0, 100) : '';
+    // Check if client exists in client database to automatically retrieve name
+    let clientName = name ? String(name).trim().slice(0, 100) : '';
+    if (!clientName) {
+      const clientLookup = await db.searchClientByPhone(userId, normalizedPhone);
+      if (clientLookup.found && clientLookup.client) {
+        clientName = clientLookup.client.name;
+      }
+    }
+
+    const cleanName = clientName || "Noma'lum";
     const cleanPhone = normalizedPhone.slice(0, 20);
     const cleanDirection = ['outgoing_call', 'incoming_manual', 'booking_request', 'appointment'].includes(direction)
       ? direction
-      : 'outgoing_call';
+      : 'incoming_manual';
 
     const item = await db.addCallLog(userId, cleanPhone, cleanName, cleanDirection);
 

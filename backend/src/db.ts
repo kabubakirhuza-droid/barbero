@@ -236,6 +236,14 @@ export function getTashkentNow(): { dateStr: string; timeStr: string } {
   };
 }
 
+export function normalizeUzbekPhone(raw: string): string {
+  let digits = String(raw || '').replace(/\D/g, '');
+  if (digits.length === 9) {
+    digits = `998${digits}`;
+  }
+  return digits ? `+${digits}` : '';
+}
+
 export class Database {
   private isInitialized = false;
   private initError: Error | null = null;
@@ -848,24 +856,147 @@ export class Database {
     return (res.rowCount || 0) > 0;
   }
 
-  public async createOrUpdateClient(userId: string, name: string, phone: string, spentDelta: number = 0): Promise<Client> {
-    const existingRes = await this.query('SELECT * FROM clients WHERE user_id = $1 AND phone = $2 LIMIT 1', [userId, phone]);
+  public async searchClientByPhone(userId: string, rawPhone: string): Promise<{
+    found: boolean;
+    client?: Client & {
+      avgSpend: number;
+      lastVisit?: {
+        date: string;
+        startTime: string;
+        serviceName: string;
+        servicePrice: number;
+        duration: number;
+        status: string;
+      };
+    };
+    normalizedPhone: string;
+  }> {
+    const normalizedPhone = normalizeUzbekPhone(rawPhone);
+    const digits = normalizedPhone.replace(/\D/g, '');
+    const last9 = digits.slice(-9);
+
+    if (!last9) {
+      return { found: false, normalizedPhone };
+    }
+
+    const res = await this.query(
+      `SELECT * FROM clients 
+       WHERE user_id = $1 AND (phone = $2 OR phone LIKE $3 OR phone = $4) 
+       LIMIT 1`,
+      [userId, normalizedPhone, `%${last9}`, last9]
+    );
+
+    if (res.rows.length === 0) {
+      return { found: false, normalizedPhone };
+    }
+
+    const row = res.rows[0];
+    const client = this.mapClient(row);
+    const visits = client.visitsCount || 0;
+    const avgSpend = visits > 0 ? Math.round((client.totalSpent || 0) / visits) : (client.totalSpent || 0);
+
+    const lastAptRes = await this.query(
+      `SELECT * FROM appointments 
+       WHERE user_id = $1 AND (client_id = $2 OR client_phone = $3 OR client_phone LIKE $4) 
+         AND status != 'cancelled' 
+       ORDER BY appointment_date DESC, start_time DESC 
+       LIMIT 1`,
+      [userId, client.id, normalizedPhone, `%${last9}`]
+    );
+
+    let lastVisit;
+    if (lastAptRes.rows.length > 0) {
+      const apt = lastAptRes.rows[0];
+      lastVisit = {
+        date: apt.appointment_date,
+        startTime: apt.start_time,
+        serviceName: apt.service_name,
+        servicePrice: Number(apt.service_price || 0),
+        duration: Number(apt.duration || 30),
+        status: apt.status,
+      };
+    }
+
+    return {
+      found: true,
+      client: {
+        ...client,
+        avgSpend,
+        lastVisit,
+      },
+      normalizedPhone,
+    };
+  }
+
+  public async getClientHistory(userId: string, clientId: string): Promise<{
+    client: Client | null;
+    history: Array<{
+      id: string;
+      date: string;
+      startTime: string;
+      endTime: string;
+      serviceName: string;
+      servicePrice: number;
+      status: string;
+      formattedSummary: string;
+    }>;
+  }> {
+    const client = await this.getClientById(clientId, userId);
+    if (!client) {
+      return { client: null, history: [] };
+    }
+
+    const res = await this.query(
+      `SELECT * FROM appointments 
+       WHERE user_id = $1 AND (client_id = $2 OR client_phone = $3) 
+       ORDER BY appointment_date DESC, start_time DESC`,
+      [userId, clientId, client.phone]
+    );
+
+    const history = res.rows.map((r: any) => {
+      const formattedPrice = Number(r.service_price || 0).toLocaleString('uz-UZ') + " so'm";
+      return {
+        id: r.id,
+        date: r.appointment_date,
+        startTime: r.start_time,
+        endTime: r.end_time,
+        serviceName: r.service_name,
+        servicePrice: Number(r.service_price || 0),
+        status: r.status,
+        formattedSummary: `${r.appointment_date} — ${r.service_name} — ${formattedPrice}`,
+      };
+    });
+
+    return { client, history };
+  }
+
+  public async createOrUpdateClient(userId: string, name: string, phone: string, spentDelta: number = 0, notes?: string): Promise<Client> {
+    const normalizedPhone = normalizeUzbekPhone(phone) || phone;
+    const digits = normalizedPhone.replace(/\D/g, '');
+    const last9 = digits.slice(-9);
+
+    const existingRes = await this.query(
+      `SELECT * FROM clients WHERE user_id = $1 AND (phone = $2 OR phone LIKE $3 OR phone = $4) LIMIT 1`,
+      [userId, normalizedPhone, `%${last9}`, last9]
+    );
+
     if (existingRes.rows.length > 0) {
       const existing = existingRes.rows[0];
       const newSpent = Number(existing.total_spent || 0) + spentDelta;
       const newVisits = Number(existing.visits_count || 0) + (spentDelta > 0 ? 1 : 0);
+      const newNotes = notes !== undefined ? notes : existing.notes;
       const res = await this.query(
-        `UPDATE clients SET name = $3, total_spent = $4, visits_count = $5, updated_at = NOW() WHERE id = $1 AND user_id = $2 RETURNING *`,
-        [existing.id, userId, name || existing.name, newSpent, newVisits]
+        `UPDATE clients SET name = $3, phone = $4, notes = $5, total_spent = $6, visits_count = $7, updated_at = NOW() WHERE id = $1 AND user_id = $2 RETURNING *`,
+        [existing.id, userId, name || existing.name, normalizedPhone, newNotes || null, newSpent, newVisits]
       );
       return this.mapClient(res.rows[0]);
     } else {
       const id = `c-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
       const res = await this.query(
         `INSERT INTO clients (id, user_id, name, phone, notes, total_spent, visits_count, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, NULL, $5, $6, NOW(), NOW())
+         VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
          RETURNING *`,
-        [id, userId, name, phone, spentDelta, spentDelta > 0 ? 1 : 0]
+        [id, userId, name, normalizedPhone, notes || null, spentDelta, spentDelta > 0 ? 1 : 0]
       );
       return this.mapClient(res.rows[0]);
     }
@@ -962,6 +1093,130 @@ export class Database {
       [userId]
     );
     return res.rows.map(this.mapAppointment);
+  }
+
+  public async getTodaySchedule(userId: string, targetDate?: string): Promise<{
+    date: string;
+    dayOfWeek: string;
+    appointments: Appointment[];
+    currentAppointment: Appointment | null;
+    upcomingAppointments: Appointment[];
+    freeSlots: Array<{
+      startTime: string;
+      endTime: string;
+      isAvailable: boolean;
+      status: 'FREE' | 'OCCUPIED' | 'BLOCKED' | 'CURRENT' | 'PAST';
+      appointment?: Appointment;
+    }>;
+    stats: {
+      totalClients: number;
+      completedCount: number;
+      totalRevenue: number;
+      remainingCount: number;
+    };
+  }> {
+    const { dateStr: todayStr, timeStr: nowTime } = getTashkentNow();
+    const date = targetDate || todayStr;
+    const isToday = date === todayStr;
+
+    const appointments = await this.getAppointments(userId, date);
+    const blockedSlots = await this.getBlockedSlots(userId, date);
+
+    const workingHours = await this.getWorkingHours(userId);
+    const dayDate = new Date(`${date}T12:00:00Z`);
+    let jsDay = dayDate.getUTCDay();
+    const dbDayIndex = jsDay === 0 ? 7 : jsDay;
+    const todayWorkingDay = workingHours.find((w) => w.dayIndex === dbDayIndex) || {
+      dayOfWeek: 'Bugun',
+      dayIndex: dbDayIndex,
+      isWorking: true,
+      startTime: '09:00',
+      endTime: '21:00',
+      lunchStart: '13:00',
+      lunchEnd: '14:00',
+    };
+
+    const slotStart = todayWorkingDay.isWorking ? (todayWorkingDay.startTime || '09:00') : '09:00';
+    const slotEnd = todayWorkingDay.isWorking ? (todayWorkingDay.endTime || '21:00') : '21:00';
+
+    const freeSlots: Array<{
+      startTime: string;
+      endTime: string;
+      isAvailable: boolean;
+      status: 'FREE' | 'OCCUPIED' | 'BLOCKED' | 'CURRENT' | 'PAST';
+      appointment?: Appointment;
+    }> = [];
+
+    let cur = slotStart;
+    while (cur < slotEnd) {
+      const next = addMinutesToTime(cur, 30);
+      const matchedApt = appointments.find(
+        (a) => a.status !== 'cancelled' && a.startTime < next && a.endTime > cur
+      );
+      const isBlocked = blockedSlots.some(
+        (b) => b.startTime < next && b.endTime > cur
+      );
+
+      let status: 'FREE' | 'OCCUPIED' | 'BLOCKED' | 'CURRENT' | 'PAST' = 'FREE';
+      let isAvailable = true;
+
+      if (matchedApt) {
+        status = 'OCCUPIED';
+        isAvailable = false;
+      } else if (isBlocked) {
+        status = 'BLOCKED';
+        isAvailable = false;
+      } else if (isToday && next <= nowTime) {
+        status = 'PAST';
+        isAvailable = false;
+      }
+
+      if (isToday && cur <= nowTime && next > nowTime) {
+        if (matchedApt) status = 'CURRENT';
+      }
+
+      freeSlots.push({
+        startTime: cur,
+        endTime: next,
+        isAvailable,
+        status,
+        appointment: matchedApt,
+      });
+
+      cur = next;
+    }
+
+    let currentAppointment: Appointment | null = null;
+    if (isToday) {
+      currentAppointment = appointments.find(
+        (a) => a.status !== 'cancelled' && a.startTime <= nowTime && a.endTime > nowTime
+      ) || null;
+    }
+
+    const upcomingAppointments = appointments.filter((a) => {
+      if (a.status === 'cancelled') return false;
+      if (!isToday) return true;
+      return a.startTime >= nowTime || (a.startTime <= nowTime && a.endTime > nowTime);
+    });
+
+    const completed = appointments.filter((a) => a.status === 'completed' || a.status === 'done');
+    const valid = appointments.filter((a) => a.status !== 'cancelled' && a.status !== 'no_show');
+    const totalRevenue = valid.reduce((sum, a) => sum + (Number(a.servicePrice) || 0), 0);
+
+    return {
+      date,
+      dayOfWeek: todayWorkingDay.dayOfWeek,
+      appointments,
+      currentAppointment,
+      upcomingAppointments,
+      freeSlots,
+      stats: {
+        totalClients: valid.length,
+        completedCount: completed.length,
+        totalRevenue,
+        remainingCount: upcomingAppointments.length,
+      },
+    };
   }
 
   public async getAppointmentById(id: string, userId?: string): Promise<Appointment | null> {

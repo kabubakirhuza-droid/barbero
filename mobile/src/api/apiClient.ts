@@ -200,6 +200,11 @@ class ApiClient {
   }
 
   // --- Appointments ---
+  async getTodaySchedule(date?: string): Promise<any> {
+    const query = date ? `?date=${date}` : '';
+    return this.request(`/appointments/today${query}`);
+  }
+
   async getAppointments(date?: string): Promise<{ appointments: Appointment[]; dayTotal: number; count: number }> {
     const query = date ? `?date=${date}` : '';
     return this.request(`/appointments${query}`);
@@ -212,10 +217,24 @@ class ApiClient {
     });
   }
 
-  async quickBook(date: string, startTime: string): Promise<{ success: boolean; appointment: Appointment }> {
+  async quickBook(
+    dataOrDate: { date?: string; startTime?: string; phone?: string; name?: string; serviceId?: string; duration?: number; isWalkIn?: boolean; notes?: string } | string,
+    legacyStartTime?: string
+  ): Promise<{ success: boolean; message?: string; appointment: Appointment }> {
+    const body = typeof dataOrDate === 'string'
+      ? { date: dataOrDate, startTime: legacyStartTime }
+      : dataOrDate;
+
     return this.request('/appointments/quick', {
       method: 'POST',
-      body: JSON.stringify({ date, startTime }),
+      body: JSON.stringify(body),
+    });
+  }
+
+  async repeatBooking(data: { clientId?: string; phone?: string; date: string; startTime: string }): Promise<{ success: boolean; message: string; appointment: Appointment }> {
+    return this.request('/appointments/repeat', {
+      method: 'POST',
+      body: JSON.stringify(data),
     });
   }
 
@@ -233,6 +252,21 @@ class ApiClient {
   }
 
   // --- Clients ---
+  async searchClientByPhone(phone: string): Promise<{ success: boolean; found: boolean; client?: any; normalizedPhone: string }> {
+    return this.request(`/clients/search?phone=${encodeURIComponent(phone)}`);
+  }
+
+  async getClientHistory(clientId: string): Promise<{ success: boolean; client: any; history: any[] }> {
+    return this.request(`/clients/${clientId}/history`);
+  }
+
+  async quickClient(phone: string, name?: string, notes?: string): Promise<{ success: boolean; client: any }> {
+    return this.request('/clients/quick', {
+      method: 'POST',
+      body: JSON.stringify({ phone, name, notes }),
+    });
+  }
+
   async getClients(): Promise<{ clients: any[] }> {
     return this.request('/clients');
   }

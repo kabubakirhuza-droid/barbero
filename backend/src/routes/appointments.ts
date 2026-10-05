@@ -62,76 +62,123 @@ router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
   }
 });
 
-// POST /appointments/quick - 1-Click Instant Booking on Free Slot
+// GET /appointments/today - Barbero 1-Screen Workday Overview
+router.get('/today', async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.user!.userId;
+    const date = req.query.date as string | undefined;
+    const schedule = await db.getTodaySchedule(userId, date);
+    res.json({
+      success: true,
+      ...schedule,
+    });
+  } catch (error) {
+    console.error('[Appointments GET today error]:', error);
+    res.status(500).json({ error: 'Kunlik jadvalni yuklashda xatolik yuz berdi' });
+  }
+});
+
+// POST /appointments/quick - Rapid Booking (Phone lookup / Walk-in / 1-tap slot)
 router.post('/quick', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const userId = req.user!.userId;
-    const { date, startTime } = req.body;
+    const { date, startTime, phone, name, serviceId, duration: customDuration, isWalkIn, notes } = req.body;
 
-    if (!date || !startTime) {
+    const { dateStr: todayStr, timeStr: nowTime } = getTashkentNow();
+    const finalDate = date || todayStr;
+    const finalStartTime = startTime || (isWalkIn ? nowTime : undefined);
+
+    if (!finalDate || !finalStartTime) {
       res.status(400).json({ error: 'Sana va vaqt kiritilishi shart' });
       return;
     }
 
-    if (!isValidDate(date)) {
+    if (!isValidDate(finalDate)) {
       res.status(400).json({ error: "Sana formati noto'g'ri (YYYY-MM-DD)" });
       return;
     }
 
-    if (!isValidTime(startTime)) {
+    if (!isValidTime(finalStartTime)) {
       res.status(400).json({ error: "Vaqt formati noto'g'ri (HH:MM)" });
       return;
     }
 
-    if (isPastSlot(date, startTime)) {
-      res.status(400).json({ error: "O'tib ketgan vaqtga yozuv yaratib bo'lmaydi" });
-      return;
+    // Default master service
+    let srvName = 'Soch olish';
+    let srvPrice = 50000;
+    let srvDuration = customDuration || 30;
+    let srvColor = '#2563EB';
+    let finalServiceId = serviceId;
+
+    if (serviceId) {
+      const srv = await db.getServiceById(serviceId);
+      if (srv && srv.userId === userId) {
+        srvName = srv.name;
+        srvPrice = srv.price;
+        srvDuration = customDuration || srv.duration;
+        srvColor = srv.badgeColor || '#2563EB';
+      }
+    } else {
+      const userServices = await db.getServices(userId);
+      const activeServices = userServices.filter((s) => s.isActive);
+      const chosen = activeServices[0] || userServices[0];
+      if (chosen) {
+        srvName = chosen.name;
+        srvPrice = chosen.price;
+        srvDuration = customDuration || chosen.duration;
+        srvColor = chosen.badgeColor || '#2563EB';
+        finalServiceId = chosen.id;
+      }
     }
 
-    // Default master service from database
-    const userServices = await db.getServices(userId);
-    const activeServices = userServices.filter((s) => s.isActive);
-    const defaultService = activeServices[0] || userServices[0] || {
-      id: `srv-${userId}-def`,
-      name: 'Soch olish',
-      price: 50000,
-      duration: 30,
-      badgeColor: '#2563EB',
-    };
+    const endTime = addMinutesToTime(finalStartTime, srvDuration);
 
-    const duration = defaultService.duration || 30;
-    const endTime = addMinutesToTime(startTime, duration);
-
-    // Check interval collision with existing appointments & blocked slots
-    if (await db.hasActiveSlotConflict(userId, date, startTime, endTime)) {
+    // Check interval collision
+    if (await db.hasActiveSlotConflict(userId, finalDate, finalStartTime, endTime)) {
       res.status(409).json({ error: "Ushbu vaqt oralig'i allaqachon band qilingan" });
       return;
     }
 
-    const clientName = await getNextMijozName(userId, date);
+    let finalClientName = name ? String(name).trim().slice(0, 100) : '';
+    let finalClientPhone = phone ? String(phone).trim() : '';
+    let clientId: string | undefined;
+
+    if (finalClientPhone) {
+      const clientObj = await db.createOrUpdateClient(userId, finalClientName || 'Mijoz', finalClientPhone, srvPrice, notes);
+      clientId = clientObj.id;
+      finalClientName = clientObj.name;
+      finalClientPhone = clientObj.phone;
+
+      // Add to call log as appointment booking
+      await db.addCallLog(userId, finalClientPhone, finalClientName, 'appointment');
+    } else if (!finalClientName) {
+      finalClientName = await getNextMijozName(userId, finalDate);
+    }
+
+    const initialStatus = isWalkIn ? 'in_service' : 'confirmed';
 
     const newAppointment: Appointment = {
       id: `apt-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
       userId,
-      clientId: undefined,
-      clientName,
-      clientPhone: '',
-      serviceId: defaultService.id,
-      serviceName: defaultService.name,
-      servicePrice: defaultService.price,
-      badgeColor: defaultService.badgeColor || '#2563EB',
-      date,
-      startTime,
+      clientId,
+      clientName: finalClientName,
+      clientPhone: finalClientPhone,
+      serviceId: finalServiceId || 'srv-1',
+      serviceName: srvName,
+      servicePrice: srvPrice,
+      badgeColor: srvColor,
+      date: finalDate,
+      startTime: finalStartTime,
       endTime,
-      duration,
-      status: 'confirmed',
+      duration: srvDuration,
+      status: initialStatus as any,
     };
 
     await db.createAppointment(newAppointment);
 
     res.status(201).json({
       success: true,
-      message: 'Tezkor yozuv yaratildi',
+      message: `${finalClientName} muvaffaqiyatli yozildi`,
       appointment: newAppointment,
     });
   } catch (error: any) {
@@ -141,6 +188,80 @@ router.post('/quick', async (req: AuthRequest, res: Response): Promise<void> => 
     }
     console.error('[Appointments POST quick error]:', error);
     res.status(500).json({ error: 'Tezkor yozuvni saqlashda xatolik yuz berdi' });
+  }
+});
+
+// POST /appointments/repeat - Repeat last booking for client
+router.post('/repeat', async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.user!.userId;
+    const { clientId, phone, date, startTime } = req.body;
+
+    if (!date || !startTime) {
+      res.status(400).json({ error: 'Sana va vaqt kiritilishi shart' });
+      return;
+    }
+
+    let targetClient;
+    if (clientId) {
+      targetClient = await db.getClientById(clientId, userId);
+    } else if (phone) {
+      const search = await db.searchClientByPhone(userId, phone);
+      if (search.found && search.client) {
+        targetClient = search.client;
+      }
+    }
+
+    if (!targetClient) {
+      res.status(404).json({ error: 'Mijoz topilmadi' });
+      return;
+    }
+
+    const pastApts = await db.getAppointmentsByClientId(targetClient.id, userId);
+    const lastApt = pastApts.find((a) => a.status !== 'cancelled');
+
+    const srvId = lastApt?.serviceId || 'srv-1';
+    const srvName = lastApt?.serviceName || 'Soch olish';
+    const srvPrice = lastApt?.servicePrice || 50000;
+    const srvDuration = lastApt?.duration || 30;
+    const srvColor = lastApt?.badgeColor || '#2563EB';
+
+    const endTime = addMinutesToTime(startTime, srvDuration);
+
+    if (await db.hasActiveSlotConflict(userId, date, startTime, endTime)) {
+      res.status(409).json({ error: "Ushbu vaqt oralig'i allaqachon band qilingan" });
+      return;
+    }
+
+    const newAppointment: Appointment = {
+      id: `apt-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      userId,
+      clientId: targetClient.id,
+      clientName: targetClient.name,
+      clientPhone: targetClient.phone,
+      serviceId: srvId,
+      serviceName: srvName,
+      servicePrice: srvPrice,
+      badgeColor: srvColor,
+      date,
+      startTime,
+      endTime,
+      duration: srvDuration,
+      status: 'confirmed',
+    };
+
+    await db.createAppointment(newAppointment);
+    await db.createOrUpdateClient(userId, targetClient.name, targetClient.phone, srvPrice);
+    await db.addCallLog(userId, targetClient.phone, targetClient.name, 'appointment');
+
+    res.status(201).json({
+      success: true,
+      message: `${targetClient.name} qayta yozildi`,
+      appointment: newAppointment,
+    });
+  } catch (error) {
+    console.error('[Appointments POST repeat error]:', error);
+    res.status(500).json({ error: 'Qayta yozuvni yaratishda xatolik yuz berdi' });
   }
 });
 

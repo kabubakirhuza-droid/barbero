@@ -1,10 +1,39 @@
 export const translations = {
   uz: {
-    // Navigation Tabs (4 tabs)
+    // Navigation Tabs (5 tabs)
+    tabAsosiy: 'Asosiy',
     tabJadval: 'Jadval',
+    tabMijozlar: 'Mijozlar',
+    tabQongiroqlar: "Qo'ng'iroqlar",
     tabAnalitika: 'Analitika',
     tabPortfolio: 'Portfolio',
     tabProfil: 'Profil',
+
+    // Quick Booking & Workday
+    quickBookBtn: '+ Yozish',
+    walkInBtn: '+ Hozir',
+    searchClientBtn: 'Mijozni qidirish',
+    clientPhonePrompt: 'Mijoz telefon raqami',
+    clientFoundTitle: 'Mijoz topildi',
+    newClientTitle: 'Yangi mijoz',
+    lastVisit: 'Oxirgi tashrif',
+    visitsCountText: 'ta tashrif',
+    bookNow: 'Yozish',
+    repeatBooking: 'Qayta yozish',
+    todayWorkday: 'Bugungi ish kuni',
+    currentClient: 'Hozirgi mijoz',
+    upcomingClients: 'Kutilayotgan mijozlar',
+    freeSlots: "Bo'sh vaqtlar",
+    callLogTitle: "Qo'ng'iroqlar jurnali",
+    clientHistoryTitle: 'Mijoz tarixi',
+    completed: 'Tugatildi',
+    arrived: 'Keldi',
+    inService: 'Xizmatda',
+    freeSlotTitle: "Bo'sh vaqt",
+    selectSlotPrompt: 'Vaqtni tanlang',
+    todaySummary: 'Bugun',
+    totalClients: 'Mijoz',
+    totalRevenue: 'Tushum',
 
     // Onboarding (3 slides: Jadval, Daromad, Booking link)
     skip: "O'tkazib yuborish",
@@ -180,11 +209,40 @@ export const translations = {
     errorReload: 'Qayta yuklash',
   },
   ru: {
-    // Navigation Tabs (4 tabs)
-    tabJadval: 'Расписание',
+    // Navigation Tabs (5 tabs)
+    tabAsosiy: 'Главная',
+    tabJadval: 'Записи',
+    tabMijozlar: 'Клиенты',
+    tabQongiroqlar: 'Звонки',
     tabAnalitika: 'Аналитика',
     tabPortfolio: 'Портфолио',
     tabProfil: 'Профиль',
+
+    // Quick Booking & Workday
+    quickBookBtn: '+ Записать',
+    walkInBtn: '+ Сейчас',
+    searchClientBtn: 'Найти клиента',
+    clientPhonePrompt: 'Номер клиента',
+    clientFoundTitle: 'Найден клиент',
+    newClientTitle: 'Новый клиент',
+    lastVisit: 'Последний визит',
+    visitsCountText: 'визитов',
+    bookNow: 'Записать',
+    repeatBooking: 'Повторить запись',
+    todayWorkday: 'Рабочий день',
+    currentClient: 'Текущий клиент',
+    upcomingClients: 'Ближайшие записи',
+    freeSlots: 'Свободные окна',
+    callLogTitle: 'Журнал звонков',
+    clientHistoryTitle: 'История клиента',
+    completed: 'Завершено',
+    arrived: 'Прибыл',
+    inService: 'В процессе',
+    freeSlotTitle: 'Свободное окно',
+    selectSlotPrompt: 'Выберите время',
+    todaySummary: 'Сегодня',
+    totalClients: 'Клиентов',
+    totalRevenue: 'Доход',
 
     // Onboarding (3 slides)
     skip: 'Пропустить',

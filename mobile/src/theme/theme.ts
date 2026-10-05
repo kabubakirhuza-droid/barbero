@@ -44,6 +44,7 @@ export const colors = {
   textPrimary: COLOR_TEXT,
   textSecondary: '#475569',
   textMuted: COLOR_MUTED,
+  textTertiary: '#94A3B8',
   textLight: '#FFFFFF',
 
   // Gradients
