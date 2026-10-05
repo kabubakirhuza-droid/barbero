@@ -93,7 +93,7 @@ export interface Appointment {
   startTime: string; // "14:00"
   endTime: string; // "14:30"
   duration: number; // minutes
-  status: 'confirmed' | 'cancelled' | 'completed';
+  status: 'confirmed' | 'arrived' | 'done' | 'completed' | 'no_show' | 'cancelled';
   createdAt?: string;
 }
 
@@ -150,6 +150,47 @@ export interface Review {
   createdAt?: string;
 }
 
+export interface BlockedSlot {
+  id: string;
+  userId: string;
+  appointmentDate: string;
+  startTime: string;
+  endTime: string;
+  reason?: string;
+  createdAt?: string;
+}
+
+export interface CallLogItem {
+  id: string;
+  userId: string;
+  phone: string;
+  name: string;
+  direction: 'outgoing_call' | 'incoming_manual' | 'booking_request' | 'appointment';
+  isClient?: boolean;
+  createdAt: string;
+}
+
+export interface LegalDocument {
+  slug: string;
+  titleUz: string;
+  titleRu: string;
+  bodyUz: string;
+  bodyRu: string;
+  version: string;
+  publishedAt: string;
+}
+
+export interface NotificationItem {
+  id: string;
+  userId: string;
+  type: string;
+  title: string;
+  body: string;
+  data?: any;
+  readAt?: string;
+  createdAt: string;
+}
+
 // PostgreSQL Connection Pool Setup
 const poolConfig: PoolConfig = {
   connectionString: config.databaseUrl || 'postgresql://postgres:postgres@localhost:5432/barbero_db',
@@ -197,8 +238,8 @@ export class Database {
             id VARCHAR(64) PRIMARY KEY,
             phone VARCHAR(20) NOT NULL UNIQUE,
             ism VARCHAR(60) DEFAULT 'Master',
-            familiya VARCHAR(60) DEFAULT 'BarberPlan',
-            full_name VARCHAR(120) DEFAULT 'BarberPlan Master',
+            familiya VARCHAR(60) DEFAULT 'Barbero',
+            full_name VARCHAR(120) DEFAULT 'Barbero Master',
             username VARCHAR(50) UNIQUE,
             avatar_url TEXT,
             bio TEXT,
@@ -323,6 +364,51 @@ export class Database {
             security_pin VARCHAR(4),
             biometrics_enabled BOOLEAN DEFAULT FALSE
           );
+          CREATE TABLE IF NOT EXISTS blocked_slots (
+            id VARCHAR(64) PRIMARY KEY,
+            user_id VARCHAR(64) REFERENCES users(id) ON DELETE CASCADE,
+            appointment_date VARCHAR(20) NOT NULL,
+            start_time VARCHAR(10) NOT NULL,
+            end_time VARCHAR(10) NOT NULL,
+            reason VARCHAR(255) DEFAULT 'Dam olish',
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+          );
+          CREATE TABLE IF NOT EXISTS call_log (
+            id VARCHAR(64) PRIMARY KEY,
+            user_id VARCHAR(64) REFERENCES users(id) ON DELETE CASCADE,
+            phone VARCHAR(20) NOT NULL,
+            name VARCHAR(100) DEFAULT '',
+            direction VARCHAR(30) DEFAULT 'outgoing_call',
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+          );
+          CREATE INDEX IF NOT EXISTS idx_call_log_user_created ON call_log (user_id, created_at DESC);
+
+          CREATE TABLE IF NOT EXISTS legal_documents (
+            slug VARCHAR(100) PRIMARY KEY,
+            title_uz VARCHAR(255) NOT NULL,
+            title_ru VARCHAR(255) NOT NULL,
+            body_uz TEXT NOT NULL,
+            body_ru TEXT NOT NULL,
+            version VARCHAR(20) NOT NULL DEFAULT '1.0',
+            published_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+          );
+          CREATE TABLE IF NOT EXISTS legal_acceptances (
+            id VARCHAR(64) PRIMARY KEY,
+            user_id VARCHAR(64) REFERENCES users(id) ON DELETE CASCADE,
+            slug VARCHAR(100) REFERENCES legal_documents(slug) ON DELETE CASCADE,
+            version VARCHAR(20) NOT NULL,
+            accepted_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+          );
+          CREATE TABLE IF NOT EXISTS notifications (
+            id VARCHAR(64) PRIMARY KEY,
+            user_id VARCHAR(64) REFERENCES users(id) ON DELETE CASCADE,
+            type VARCHAR(50) NOT NULL,
+            title VARCHAR(255) NOT NULL,
+            body TEXT NOT NULL,
+            data JSONB DEFAULT '{}',
+            read_at TIMESTAMP WITH TIME ZONE,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+          );
           CREATE TABLE IF NOT EXISTS push_subscriptions (
             id VARCHAR(64) PRIMARY KEY,
             user_id VARCHAR(64) REFERENCES users(id) ON DELETE CASCADE,
@@ -343,7 +429,47 @@ export class Database {
         `;
       }
 
-      await pool.query(schemaSql);
+      // Execute schema creation safely
+      try {
+        await pool.query('SELECT pg_advisory_lock(8472910)');
+        await pool.query(schemaSql);
+        
+        // Seed default legal documents if not present
+        await pool.query(`
+          INSERT INTO legal_documents (slug, title_uz, title_ru, body_uz, body_ru, version, published_at)
+          VALUES
+            (
+              'oferta',
+              'Ommaviy oferta',
+              'Публичная оферта',
+              'Barbero xizmatidan foydalanish bo''yicha ommaviy oferta shartlari. Ushbu hujjat xizmat ko''rsatuvchi va foydalanuvchi o''rtasidagi huquqiy munosabatlarni tartibga soladi.',
+              'Условия публичной оферты по использованию сервиса Barbero. Настоящий документ регулирует правоотношения между сервисом и пользователем.',
+              '1.0',
+              NOW()
+            ),
+            (
+              'maxfiylik',
+              'Maxfiylik siyosati',
+              'Политика конфиденциальности',
+              'Barbero foydalanuvchilarining shaxsiy ma''lumotlarini himoya qilish va qayta ishlash siyosati.',
+              'Политика защиты и обработки персональных данных пользователей Barbero.',
+              '1.0',
+              NOW()
+            ),
+            (
+              'mijozlar-maxfiylik',
+              'Mijozlar uchun maxfiylik siyosati',
+              'Политика конфиденциальности для клиентов',
+              'Mijozlar yozuvlari va telefon raqamlari xavfsizligini ta''minlash shartlari.',
+              'Условия обеспечения безопасности записей и номеров телефонов клиентов.',
+              '1.0',
+              NOW()
+            )
+          ON CONFLICT (slug) DO NOTHING;
+        `);
+      } finally {
+        await pool.query('SELECT pg_advisory_unlock(8472910)').catch(() => {});
+      }
 
       // Safe schema adjustments
       try {
@@ -384,7 +510,7 @@ export class Database {
   }
 
   public async createUser(user: User): Promise<User> {
-    const fullName = user.fullName || `${user.ism || ''} ${user.familiya || ''}`.trim() || 'BarberPlan Foydalanuvchi';
+    const fullName = user.fullName || `${user.ism || ''} ${user.familiya || ''}`.trim() || 'Barbero Foydalanuvchi';
     let finalUsername = user.username || `user_${user.phone.slice(-4)}`;
     try {
       const taken = await this.query('SELECT id FROM users WHERE username = $1 AND id != $2 LIMIT 1', [finalUsername, user.id]);
@@ -747,7 +873,14 @@ export class Database {
       : "SELECT id FROM appointments WHERE user_id = $1 AND appointment_date = $2 AND start_time = $3 AND status != 'cancelled' LIMIT 1";
     const params = excludeId ? [userId, date, startTime, excludeId] : [userId, date, startTime];
     const res = await this.query(query, params);
-    return res.rows.length > 0;
+    if (res.rows.length > 0) return true;
+
+    // Also check blocked slots
+    const blockedRes = await this.query(
+      "SELECT id FROM blocked_slots WHERE user_id = $1 AND appointment_date = $2 AND start_time = $3 LIMIT 1",
+      [userId, date, startTime]
+    );
+    return blockedRes.rows.length > 0;
   }
 
   public async getAppointmentsByClientId(clientId: string, userId: string): Promise<Appointment[]> {
@@ -1406,6 +1539,239 @@ export class Database {
       comment: row.comment || undefined,
       createdAt: row.created_at ? new Date(row.created_at).toISOString() : undefined,
     };
+  }
+
+  // --- Blocked Slots (Dam olish / Lunch Break) ---
+  public async getBlockedSlots(userId: string, date?: string): Promise<BlockedSlot[]> {
+    let query = 'SELECT * FROM blocked_slots WHERE user_id = $1';
+    const params: any[] = [userId];
+    if (date) {
+      query += ' AND appointment_date = $2';
+      params.push(date);
+    }
+    query += ' ORDER BY start_time ASC';
+    const res = await this.query(query, params);
+    return res.rows.map((r: any) => ({
+      id: r.id,
+      userId: r.user_id,
+      appointmentDate: r.appointment_date,
+      startTime: r.start_time,
+      endTime: r.end_time,
+      reason: r.reason || 'Dam olish',
+      createdAt: r.created_at ? new Date(r.created_at).toISOString() : undefined,
+    }));
+  }
+
+  public async createBlockedSlot(slot: {
+    id?: string;
+    userId: string;
+    appointmentDate: string;
+    startTime: string;
+    endTime: string;
+    reason?: string;
+  }): Promise<BlockedSlot> {
+    const id = slot.id || `block-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    const res = await this.query(
+      `INSERT INTO blocked_slots (id, user_id, appointment_date, start_time, end_time, reason, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, NOW())
+       RETURNING *`,
+      [
+        id,
+        slot.userId,
+        slot.appointmentDate,
+        slot.startTime,
+        slot.endTime || slot.startTime,
+        slot.reason || 'Dam olish',
+      ]
+    );
+    const r = res.rows[0];
+    return {
+      id: r.id,
+      userId: r.user_id,
+      appointmentDate: r.appointment_date,
+      startTime: r.start_time,
+      endTime: r.end_time,
+      reason: r.reason,
+      createdAt: r.created_at ? new Date(r.created_at).toISOString() : undefined,
+    };
+  }
+
+  public async deleteBlockedSlot(id: string, userId: string): Promise<boolean> {
+    const res = await this.query(
+      'DELETE FROM blocked_slots WHERE id = $1 AND user_id = $2',
+      [id, userId]
+    );
+    return (res.rowCount || 0) > 0;
+  }
+
+  // --- Call Log ---
+  public async getCallLogs(userId: string, limit: number = 20): Promise<CallLogItem[]> {
+    const query = `
+      SELECT c.id, c.user_id, c.phone,
+             COALESCE(NULLIF(c.name, ''), cl.name, 'Noma''lum') as name,
+             c.direction, c.created_at,
+             (cl.id IS NOT NULL) as is_client
+      FROM (
+        SELECT DISTINCT ON (phone) id, user_id, phone, name, direction, created_at
+        FROM call_log
+        WHERE user_id = $1 AND created_at >= NOW() - INTERVAL '30 days'
+        ORDER BY phone, created_at DESC
+      ) c
+      LEFT JOIN clients cl ON cl.user_id = c.user_id AND cl.phone = c.phone
+      ORDER BY c.created_at DESC
+      LIMIT $2
+    `;
+    const res = await this.query(query, [userId, limit]);
+    return res.rows.map((r: any) => ({
+      id: r.id,
+      userId: r.user_id,
+      phone: r.phone,
+      name: r.name || "Noma'lum",
+      direction: r.direction as any,
+      isClient: Boolean(r.is_client),
+      createdAt: r.created_at ? new Date(r.created_at).toISOString() : new Date().toISOString(),
+    }));
+  }
+
+  public async addCallLog(
+    userId: string,
+    phone: string,
+    name?: string,
+    direction: 'outgoing_call' | 'incoming_manual' | 'booking_request' | 'appointment' = 'outgoing_call'
+  ): Promise<CallLogItem> {
+    const id = `cl-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    const res = await this.query(
+      `INSERT INTO call_log (id, user_id, phone, name, direction, created_at)
+       VALUES ($1, $2, $3, $4, $5, NOW())
+       RETURNING *`,
+      [id, userId, phone, name || '', direction]
+    );
+    const r = res.rows[0];
+    return {
+      id: r.id,
+      userId: r.user_id,
+      phone: r.phone,
+      name: r.name || "Noma'lum",
+      direction: r.direction as any,
+      createdAt: r.created_at ? new Date(r.created_at).toISOString() : new Date().toISOString(),
+    };
+  }
+
+  // --- Legal Documents ---
+  public async getLegalDocuments(): Promise<LegalDocument[]> {
+    const res = await this.query('SELECT * FROM legal_documents ORDER BY slug ASC');
+    return res.rows.map((r: any) => ({
+      slug: r.slug,
+      titleUz: r.title_uz,
+      titleRu: r.title_ru,
+      bodyUz: r.body_uz,
+      bodyRu: r.body_ru,
+      version: r.version,
+      publishedAt: r.published_at ? new Date(r.published_at).toISOString() : new Date().toISOString(),
+    }));
+  }
+
+  public async getLegalDocument(slug: string): Promise<LegalDocument | null> {
+    const res = await this.query('SELECT * FROM legal_documents WHERE slug = $1 LIMIT 1', [slug]);
+    if (res.rows.length === 0) return null;
+    const r = res.rows[0];
+    return {
+      slug: r.slug,
+      titleUz: r.title_uz,
+      titleRu: r.title_ru,
+      bodyUz: r.body_uz,
+      bodyRu: r.body_ru,
+      version: r.version,
+      publishedAt: r.published_at ? new Date(r.published_at).toISOString() : new Date().toISOString(),
+    };
+  }
+
+  public async acceptLegalDocument(userId: string, slug: string, version: string): Promise<boolean> {
+    const id = `la-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    await this.query(
+      `INSERT INTO legal_acceptances (id, user_id, slug, version, accepted_at)
+       VALUES ($1, $2, $3, $4, NOW())`,
+      [id, userId, slug, version]
+    );
+    return true;
+  }
+
+  // --- Notifications ---
+  public async getNotifications(userId: string): Promise<NotificationItem[]> {
+    const res = await this.query(
+      'SELECT * FROM notifications WHERE user_id = $1 ORDER BY created_at DESC LIMIT 50',
+      [userId]
+    );
+    return res.rows.map((r: any) => ({
+      id: r.id,
+      userId: r.user_id,
+      type: r.type,
+      title: r.title,
+      body: r.body,
+      data: r.data || {},
+      readAt: r.read_at ? new Date(r.read_at).toISOString() : undefined,
+      createdAt: r.created_at ? new Date(r.created_at).toISOString() : new Date().toISOString(),
+    }));
+  }
+
+  public async createNotification(notif: {
+    id?: string;
+    userId: string;
+    type: string;
+    title: string;
+    body: string;
+    data?: any;
+  }): Promise<NotificationItem> {
+    const id = notif.id || `notif-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    const res = await this.query(
+      `INSERT INTO notifications (id, user_id, type, title, body, data, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, NOW())
+       RETURNING *`,
+      [id, notif.userId, notif.type, notif.title, notif.body, JSON.stringify(notif.data || {})]
+    );
+    const r = res.rows[0];
+    return {
+      id: r.id,
+      userId: r.user_id,
+      type: r.type,
+      title: r.title,
+      body: r.body,
+      data: r.data || {},
+      readAt: undefined,
+      createdAt: r.created_at ? new Date(r.created_at).toISOString() : new Date().toISOString(),
+    };
+  }
+
+  public async markNotificationRead(id: string, userId: string): Promise<boolean> {
+    const res = await this.query(
+      'UPDATE notifications SET read_at = NOW() WHERE id = $1 AND user_id = $2',
+      [id, userId]
+    );
+    return (res.rowCount || 0) > 0;
+  }
+
+  public async markAllNotificationsRead(userId: string): Promise<boolean> {
+    const res = await this.query(
+      'UPDATE notifications SET read_at = NOW() WHERE user_id = $1 AND read_at IS NULL',
+      [userId]
+    );
+    return (res.rowCount || 0) > 0;
+  }
+
+  // --- Auto-expire Booking Requests (called on request check) ---
+  public async expirePendingBookingRequests(ttlMinutes: number = 30): Promise<number> {
+    try {
+      const res = await this.query(
+        `UPDATE booking_requests
+         SET status = 'expired'
+         WHERE status = 'pending'
+           AND created_at < NOW() - ($1 || ' minutes')::INTERVAL`,
+        [ttlMinutes]
+      );
+      return res.rowCount || 0;
+    } catch (_) {
+      return 0;
+    }
   }
 }
 

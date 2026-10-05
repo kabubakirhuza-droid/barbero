@@ -26,6 +26,7 @@ import { ProfilScreen } from './src/screens/ProfilScreen';
 import { ClientHomeScreen } from './src/screens/ClientHomeScreen';
 import { AddServiceModal } from './src/screens/AddServiceModal';
 import { NotificationsScreen } from './src/screens/NotificationsScreen';
+import { BookingRequestsScreen } from './src/screens/BookingRequestsScreen';
 import { PublicBookingPreviewModal } from './src/screens/PublicBookingPreviewModal';
 import { APP_NAME } from './src/config/appConfig';
 import { api } from './src/api/apiClient';
@@ -48,6 +49,9 @@ function MainApp() {
   const [activeTab, setActiveTab] = useState<TabKey>('jadval');
   const [isAddServiceModalVisible, setIsAddServiceModalVisible] = useState(false);
   const [isNotificationsVisible, setIsNotificationsVisible] = useState(false);
+  const [isRequestsVisible, setIsRequestsVisible] = useState(false);
+  const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
+  const [pendingRequestsCount, setPendingRequestsCount] = useState(0);
 
   // Public booking route detection (web only)
   const isPublicBookingRoute =
@@ -67,6 +71,36 @@ function MainApp() {
       link.href = '/assets/logo.png';
     }
   }, []);
+
+  // Poll badges when authenticated as MASTER
+  const fetchBadges = async () => {
+    if (!isAuthenticated || userRole !== 'MASTER') return;
+    try {
+      const [reqRes, notifRes] = await Promise.allSettled([
+        api.getBookingRequests(),
+        api.getNotifications(),
+      ]);
+      if (reqRes.status === 'fulfilled' && reqRes.value?.requests) {
+        const pending = reqRes.value.requests.filter(
+          (r: any) => r.status === 'new' || r.status === 'pending' || !r.status
+        );
+        setPendingRequestsCount(pending.length);
+      }
+      if (notifRes.status === 'fulfilled' && notifRes.value?.unreadCount !== undefined) {
+        setUnreadNotificationsCount(notifRes.value.unreadCount);
+      }
+    } catch (e) {
+      // ignore badge fetch errors
+    }
+  };
+
+  useEffect(() => {
+    if (isAuthenticated && userRole === 'MASTER') {
+      fetchBadges();
+      const interval = setInterval(fetchBadges, 15000);
+      return () => clearInterval(interval);
+    }
+  }, [isAuthenticated, userRole]);
 
   useEffect(() => {
     const initApp = async () => {
@@ -90,6 +124,17 @@ function MainApp() {
               await AsyncStorage.setItem(ROLE_KEY, role);
             } else {
               setUserRole('MASTER');
+            }
+            if (meRes?.user) {
+              const uName = meRes.user.name || meRes.user.ism || '';
+              if (uName) {
+                await AsyncStorage.setItem('barbero_client_name', uName).catch(() => {});
+                await AsyncStorage.setItem('app_user_name', uName).catch(() => {});
+              }
+              if (meRes.user.phone) {
+                await AsyncStorage.setItem('barbero_client_phone', meRes.user.phone).catch(() => {});
+                await AsyncStorage.setItem('app_user_phone', meRes.user.phone).catch(() => {});
+              }
             }
           } catch (e) {
             setUserRole('MASTER');
@@ -123,6 +168,7 @@ function MainApp() {
     setUserRole(role);
     setSelectedRole(null); // clear temp selection
     setIsAuthenticated(true);
+    fetchBadges();
   };
 
   const handleLogout = async () => {
@@ -132,6 +178,8 @@ function MainApp() {
     setUserRole(null);
     setSelectedRole(null);
     setActiveTab('jadval');
+    setPendingRequestsCount(0);
+    setUnreadNotificationsCount(0);
   };
 
   // --- Splash Screen (<= 2 seconds animated brand splash) ---
@@ -235,6 +283,9 @@ function MainApp() {
       <Header
         onCalendarPress={() => setActiveTab('jadval')}
         onNotificationPress={() => setIsNotificationsVisible(true)}
+        onRequestsPress={() => setIsRequestsVisible(true)}
+        requestsCount={pendingRequestsCount}
+        unreadCount={unreadNotificationsCount}
       />
 
       {/* Main Tab Screen Content */}
@@ -255,6 +306,23 @@ function MainApp() {
       {/* 4-Tab Floating Nav Bar */}
       <FloatingTabBar activeTab={activeTab} onTabPress={setActiveTab} />
 
+      {/* Modal: So'rovlar (Booking requests) */}
+      <Modal
+        visible={isRequestsVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+      >
+        <BookingRequestsScreen
+          onBack={() => {
+            setIsRequestsVisible(false);
+            fetchBadges();
+          }}
+          onRequestAccepted={() => {
+            fetchBadges();
+          }}
+        />
+      </Modal>
+
       {/* Modal: Bildirishnomalar (Notifications) */}
       <Modal
         visible={isNotificationsVisible}
@@ -262,7 +330,10 @@ function MainApp() {
         presentationStyle="pageSheet"
       >
         <NotificationsScreen
-          onBack={() => setIsNotificationsVisible(false)}
+          onBack={() => {
+            setIsNotificationsVisible(false);
+            fetchBadges();
+          }}
         />
       </Modal>
 

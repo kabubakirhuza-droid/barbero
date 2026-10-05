@@ -158,7 +158,7 @@ export const AnimatedSplashScreen: React.FC<AnimatedSplashScreenProps> = ({ onFi
         </View>
 
         {/* Brand Name */}
-        <Text style={styles.brandTitle}>BARBERPLAN</Text>
+        <Text style={styles.brandTitle}>BARBERO</Text>
         <Text style={styles.brandSubtitle}>Sartaroshlar va mijozlar uchun qulay platforma</Text>
 
         {/* Gold Accent Bar */}

@@ -1,7 +1,7 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
-export const APP_NAME = process.env.APP_NAME || 'BarberPlan';
+export const APP_NAME = process.env.APP_NAME || 'Barbero';
 export const APP_BASE_URL = process.env.APP_BASE_URL || 'http://localhost:8081';
 
 export const isProduction =
@@ -30,6 +30,7 @@ export const config = {
   telegramGatewayToken,
   databaseUrl,
   salonMergeRadiusM: parseInt(process.env.SALON_MERGE_RADIUS_M || '50', 10), // 50 meters
+  requestTtlMinutes: parseInt(process.env.REQUEST_TTL_MINUTES || '30', 10), // 30 minutes
   rateLimitSeconds: 60,
   maxVerificationAttempts: 5,
   vapidPublicKey: process.env.VAPID_PUBLIC_KEY || '',

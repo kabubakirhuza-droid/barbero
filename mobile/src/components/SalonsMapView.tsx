@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -47,6 +47,27 @@ export const SalonsMapView: React.FC<SalonsMapViewProps & { onRequestLocation?: 
   const [selectedSalon, setSelectedSalon] = useState<SalonWithLocation | null>(
     salons[0] || null
   );
+
+  useEffect(() => {
+    if (salons.length > 0 && !selectedSalon) {
+      setSelectedSalon(salons[0]);
+    }
+  }, [salons, selectedSalon]);
+
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    const handleMsg = (event: MessageEvent) => {
+      if (event.data && event.data.type === 'SELECT_SALON') {
+        const found = salons.find((s) => s.id === event.data.id);
+        if (found) {
+          setSelectedSalon(found);
+          onSelectSalon(found);
+        }
+      }
+    };
+    window.addEventListener('message', handleMsg);
+    return () => window.removeEventListener('message', handleMsg);
+  }, [salons, onSelectSalon]);
 
   const centerLat = userCoords?.lat || (salons[0]?.latitude ?? 41.311081);
   const centerLng = userCoords?.lng || (salons[0]?.longitude ?? 69.240562);
@@ -205,6 +226,7 @@ export const SalonsMapView: React.FC<SalonsMapViewProps & { onRequestLocation?: 
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
+          style={{ flexGrow: 0, height: 160 }}
           contentContainerStyle={styles.cardsScroll}
         >
           {salons.map((salon) => {
@@ -324,6 +346,9 @@ const styles = StyleSheet.create({
   },
   bottomCarousels: {
     paddingVertical: 12,
+    flexGrow: 0,
+    flexShrink: 0,
+    height: 180,
   },
   cardsScroll: {
     paddingHorizontal: 16,

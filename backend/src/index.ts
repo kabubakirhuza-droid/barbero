@@ -1,10 +1,15 @@
 import express from 'express';
 import cors from 'cors';
-import { config, APP_NAME, APP_BASE_URL } from './config';
+import path from 'path';
+import { config, APP_NAME, isJwtReady, isGatewayReady, isVapidReady } from './config';
 import authRoutes from './routes/auth';
 import serviceRoutes from './routes/services';
+import workingHoursRoutes from './routes/workingHours';
+import settingsRoutes from './routes/settings';
 import appointmentRoutes from './routes/appointments';
+import blockedSlotsRoutes from './routes/blockedSlots';
 import clientRoutes from './routes/clients';
+import callLogRoutes from './routes/callLog';
 import analyticsRoutes from './routes/analytics';
 import portfolioRoutes from './routes/portfolio';
 import profileRoutes from './routes/profile';
@@ -12,6 +17,8 @@ import publicBookingRoutes from './routes/publicBooking';
 import salonRoutes from './routes/salons';
 import bookingRequestRoutes from './routes/bookingRequests';
 import pushRoutes from './routes/push';
+import notificationRoutes from './routes/notifications';
+import legalRoutes from './routes/legal';
 import reviewRoutes from './routes/reviews';
 
 import { pool, db } from './db';
@@ -37,8 +44,12 @@ db.initDb().catch((e) => console.warn('[DB AutoInit Notice]:', e.message));
 const routes = [
   { path: '/auth', handler: authRoutes },
   { path: '/services', handler: serviceRoutes },
+  { path: '/working-hours', handler: workingHoursRoutes },
+  { path: '/settings', handler: settingsRoutes },
   { path: '/appointments', handler: appointmentRoutes },
+  { path: '/blocked-slots', handler: blockedSlotsRoutes },
   { path: '/clients', handler: clientRoutes },
+  { path: '/call-log', handler: callLogRoutes },
   { path: '/analytics', handler: analyticsRoutes },
   { path: '/portfolio', handler: portfolioRoutes },
   { path: '/profile', handler: profileRoutes },
@@ -46,25 +57,19 @@ const routes = [
   { path: '/salons', handler: salonRoutes },
   { path: '/booking-requests', handler: bookingRequestRoutes },
   { path: '/push', handler: pushRoutes },
+  { path: '/notifications', handler: notificationRoutes },
+  { path: '/legal', handler: legalRoutes },
   { path: '/reviews', handler: reviewRoutes },
 ];
 
-routes.forEach(({ path, handler }) => {
-  app.use(path, handler);
-  app.use(`/api${path}`, handler);
+routes.forEach(({ path: routePath, handler }) => {
+  app.use(routePath, handler);
+  app.use(`/api${routePath}`, handler);
 });
 
-import path from 'path';
-
-// Serve Web Application bundle and PWA static assets
-const distPath = path.resolve(__dirname, '../../mobile/dist');
-app.use(express.static(distPath));
-
-import { isJwtReady, isGatewayReady, isVapidReady } from './config';
-
-// Health check endpoint
-app.get(['/health', '/api/health'], async (req, res) => {
-  let dbStatus = config.databaseUrl ? 'missing' : 'missing';
+// Health check endpoint (GET /health and GET /api/health)
+const healthHandler = async (req: express.Request, res: express.Response) => {
+  let dbStatus: 'connected' | 'configured' | 'missing' | 'disconnected' = config.databaseUrl ? 'missing' : 'missing';
   if (config.databaseUrl) {
     try {
       await pool.query('SELECT 1');
@@ -78,7 +83,7 @@ app.get(['/health', '/api/health'], async (req, res) => {
     status: 'ok',
     app: APP_NAME,
     appName: APP_NAME,
-    version: '1.0.9',
+    version: '1.0.0',
     timestamp: new Date().toISOString(),
     db: dbStatus,
     gateway: isGatewayReady ? 'configured' : 'missing',
@@ -91,11 +96,27 @@ app.get(['/health', '/api/health'], async (req, res) => {
       vapid: isVapidReady ? 'configured' : 'missing',
     },
   });
-});
+};
+
+app.get('/health', healthHandler);
+app.get('/api/health', healthHandler);
+
+// Serve Web Application bundle and PWA static assets
+const distPath = path.resolve(__dirname, '../../mobile/dist');
+app.use(express.static(distPath));
 
 // SPA fallback for frontend client routing (non-API paths)
 app.get('*', (req, res, next) => {
-  if (req.path.startsWith('/api') || req.path.startsWith('/auth') || req.path.startsWith('/appointments')) {
+  if (
+    req.path.startsWith('/api') ||
+    req.path.startsWith('/auth') ||
+    req.path.startsWith('/appointments') ||
+    req.path.startsWith('/services') ||
+    req.path.startsWith('/salons') ||
+    req.path.startsWith('/call-log') ||
+    req.path.startsWith('/notifications') ||
+    req.path.startsWith('/legal')
+  ) {
     return next();
   }
   const indexPath = path.join(distPath, 'index.html');
@@ -108,8 +129,6 @@ if (process.env.NODE_ENV !== 'test') {
   app.listen(config.port, () => {
     console.log(`===============================================`);
     console.log(`🚀 ${APP_NAME} Backend Server running on port ${config.port}`);
-    console.log(`📍 PostGIS Salons 50m Geolocation integration active`);
-    console.log(`🔔 WebPush VAPID push notification support enabled`);
     console.log(`✨ Health: http://localhost:${config.port}/health`);
     console.log(`===============================================`);
   });

@@ -22,7 +22,7 @@ export const BarberoLogo: React.FC<BarberoLogoProps> = ({
 
   return (
     <View style={styles.container}>
-      {/* Golden Emblem with Stylized 'B' */}
+      {/* Golden/Blue Emblem with Stylized 'B' */}
       <View
         style={[
           styles.emblem,
@@ -63,7 +63,7 @@ export const BarberoLogo: React.FC<BarberoLogoProps> = ({
             },
           ]}
         >
-          BARBERPLAN
+          BARBERO
         </Text>
         {showSubtitle && (
           <Text style={[styles.brandSubtitle, { color: dark ? '#60A5FA' : colors.textSecondary }]}>
@@ -75,7 +75,7 @@ export const BarberoLogo: React.FC<BarberoLogoProps> = ({
   );
 };
 
-export const BarberPlanLogo = BarberoLogo;
+export default BarberoLogo;
 
 const styles = StyleSheet.create({
   container: {

@@ -14,10 +14,10 @@ router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
     const { date } = req.query;
     const list = await db.getAppointments(userId, date as string | undefined);
 
-    // Calculate day total
+    // Calculate day total for valid non-cancelled appointments
     const dayTotal = list
-      .filter((a) => a.status !== 'cancelled')
-      .reduce((sum, item) => sum + item.servicePrice, 0);
+      .filter((a) => a.status !== 'cancelled' && a.status !== 'no_show')
+      .reduce((sum, item) => sum + (Number(item.servicePrice) || 0), 0);
 
     res.json({
       appointments: list,
@@ -41,7 +41,7 @@ router.post('/quick', async (req: AuthRequest, res: Response): Promise<void> => 
       return;
     }
 
-    // Check double booking
+    // Check double booking & blocked slots
     if (await db.hasActiveSlotConflict(userId, date, startTime)) {
       res.status(409).json({ error: "Ushbu vaqt oralig'i allaqachon band qilingan" });
       return;
@@ -174,19 +174,18 @@ router.post('/', async (req: AuthRequest, res: Response): Promise<void> => {
   }
 });
 
-// PUT /appointments/:id - Edit client name, phone, service, date
+// PUT /appointments/:id - Edit appointment
 router.put('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const userId = req.user!.userId;
     const { id } = req.params;
-    const current = await db.getAppointmentById(id);
+    const current = await db.getAppointmentById(id, userId);
 
-    if (!current || current.userId !== userId) {
+    if (!current) {
       res.status(404).json({ error: 'Bandlik topilmadi yoki ruxsat berilmagan' });
       return;
     }
 
-    // Whitelist allowed fields to prevent arbitrary body injection
     const allowedFields = [
       'clientName',
       'clientPhone',
@@ -221,7 +220,6 @@ router.put('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
 
     const updated = await db.updateAppointment(id, userId, safeUpdates);
 
-    // If client details updated, sync client entity
     if (safeUpdates.clientName || safeUpdates.clientPhone) {
       if (updated?.clientPhone) {
         await db.createOrUpdateClient(userId, updated.clientName, updated.clientPhone, 0);
@@ -236,6 +234,76 @@ router.put('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
     }
     console.error('[Appointments PUT error]:', error);
     res.status(500).json({ error: 'Bandlikni yangilashda xatolik yuz berdi' });
+  }
+});
+
+// PATCH /appointments/:id/status - Quick status update (Keldi, Tugadi, Kelmadi, Bekor)
+router.patch('/:id/status', async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.user!.userId;
+    const { id } = req.params;
+    const { status } = req.body;
+
+    const validStatuses = ['confirmed', 'arrived', 'done', 'completed', 'no_show', 'cancelled'];
+    if (!validStatuses.includes(status)) {
+      res.status(400).json({ error: "Noto'g'ri status (confirmed, arrived, done, no_show, cancelled)" });
+      return;
+    }
+
+    const normalizedStatus = status === 'done' ? 'completed' : status;
+    const updated = await db.updateAppointment(id, userId, { status: normalizedStatus as any });
+
+    if (!updated) {
+      res.status(404).json({ error: 'Bandlik topilmadi' });
+      return;
+    }
+
+    res.json({ success: true, appointment: updated });
+  } catch (error) {
+    console.error('[Appointments PATCH status error]:', error);
+    res.status(500).json({ error: 'Statusni yangilashda xatolik yuz berdi' });
+  }
+});
+
+// POST /appointments/:id/reschedule - Reschedule appointment in 2 taps
+router.post('/:id/reschedule', async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.user!.userId;
+    const { id } = req.params;
+    const { newDate, newStartTime } = req.body;
+
+    if (!newDate || !newStartTime) {
+      res.status(400).json({ error: 'Yangi sana va vaqt kiritilishi shart' });
+      return;
+    }
+
+    const current = await db.getAppointmentById(id, userId);
+    if (!current) {
+      res.status(404).json({ error: 'Bandlik topilmadi' });
+      return;
+    }
+
+    if (await db.hasActiveSlotConflict(userId, newDate, newStartTime, id)) {
+      res.status(409).json({ error: "Ushbu yangi vaqt oralig'i allaqachon band" });
+      return;
+    }
+
+    const [hours, minutes] = newStartTime.split(':').map(Number);
+    const totalMinutes = (hours || 0) * 60 + (minutes || 0) + Number(current.duration || 30);
+    const endHours = Math.floor(totalMinutes / 60) % 24;
+    const endMins = totalMinutes % 60;
+    const newEndTime = `${String(endHours).padStart(2, '0')}:${String(endMins).padStart(2, '0')}`;
+
+    const updated = await db.updateAppointment(id, userId, {
+      date: newDate,
+      startTime: newStartTime,
+      endTime: newEndTime,
+    });
+
+    res.json({ success: true, message: 'Yozuv muvaffaqiyatli koʻchirildi', appointment: updated });
+  } catch (error) {
+    console.error('[Appointments POST reschedule error]:', error);
+    res.status(500).json({ error: 'Yozuvni koʻchirishda xatolik yuz berdi' });
   }
 });
 

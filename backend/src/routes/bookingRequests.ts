@@ -2,13 +2,18 @@ import { Router, Request, Response } from 'express';
 import { db, BookingRequest, Appointment } from '../db';
 import { pushService } from '../pushService';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
+import { config } from '../config';
 
 const router = Router();
 
-// GET /booking-requests - List of booking requests for logged-in master
+// GET /booking-requests - List of booking requests for logged-in master (auto-expires stale requests)
 router.get('/', authenticateToken, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const masterId = req.user!.userId;
+
+    // Check & expire stale pending requests automatically on every query (Section 1 & 9)
+    await db.expirePendingBookingRequests(config.requestTtlMinutes || 30);
+
     const requests = await db.getBookingRequests(masterId);
 
     res.json({
@@ -52,6 +57,9 @@ function checkRateLimit(ip: string, phone: string): boolean {
 // POST /booking-requests - Client submits request from public booking page
 router.post('/', async (req: Request, res: Response): Promise<void> => {
   try {
+    // Check & expire stale requests
+    await db.expirePendingBookingRequests(config.requestTtlMinutes || 30);
+
     const { masterId, clientName, clientPhone, serviceId, date, time } = req.body;
 
     if (!masterId || !clientName || !clientPhone || !serviceId || !date || !time) {
@@ -143,7 +151,19 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 
     const savedRequest = await db.createBookingRequest(newRequest);
 
-    // Send Push Notification to master
+    // Add entry to call log for master
+    await db.addCallLog(master.id, formattedPhone, trimmedName, 'booking_request').catch(() => {});
+
+    // Create in-app notification
+    await db.createNotification({
+      userId: master.id,
+      type: 'booking_request',
+      title: `Yangi so'rov: ${savedRequest.clientName}`,
+      body: `${savedRequest.serviceName} • ${date}, soat ${time}`,
+      data: { requestId: savedRequest.id },
+    }).catch(() => {});
+
+    // Send Web Push Notification to master
     try {
       await pushService.sendNotificationToUser(master.id, {
         title: `Yangi so'rov: ${savedRequest.clientName}`,
@@ -198,7 +218,7 @@ router.post('/:id/accept', authenticateToken, async (req: AuthRequest, res: Resp
     const newAppointment: Appointment = {
       id: `apt-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
       userId: masterId,
-      clientId: client.id,
+      clientId: client?.id,
       clientName: request.clientName,
       clientPhone: request.clientPhone,
       serviceId: request.serviceId,
@@ -214,9 +234,29 @@ router.post('/:id/accept', authenticateToken, async (req: AuthRequest, res: Resp
 
     await db.createAppointment(newAppointment);
 
+    // If client is a registered user, send push
+    const clientUser = await db.getUserByPhone(request.clientPhone);
+    if (clientUser) {
+      await db.createNotification({
+        userId: clientUser.id,
+        type: 'booking_accepted',
+        title: 'Qabulingiz tasdiqlandi! 🎉',
+        body: `${request.date} soat ${request.time} ga yozuv tasdiqlandi.`,
+        data: { appointmentId: newAppointment.id },
+      }).catch(() => {});
+
+      try {
+        await pushService.sendNotificationToUser(clientUser.id, {
+          title: 'Qabulingiz tasdiqlandi! 🎉',
+          body: `${request.date} soat ${request.time} ga yozuv tasdiqlandi.`,
+          data: { screen: 'myAppointments', url: '/yozuvlarim' },
+        });
+      } catch (_) {}
+    }
+
     res.json({
       success: true,
-      message: "So'rov qabul qilindi va jadvalga qo'shildi",
+      message: "So'rov tasdiqlandi va jadvalga qo'shildi",
       appointment: newAppointment,
     });
   } catch (error: any) {
@@ -224,8 +264,8 @@ router.post('/:id/accept', authenticateToken, async (req: AuthRequest, res: Resp
       res.status(409).json({ error: "Ushbu vaqt oralig'ida allaqachon boshqa qabul mavjud" });
       return;
     }
-    console.error('[BookingRequests accept POST error]:', error);
-    res.status(500).json({ error: 'Soʻrovni qabul qilishda xatolik yuz berdi' });
+    console.error('[BookingRequests accept error]:', error);
+    res.status(500).json({ error: "So'rovni qabul qilishda xatolik yuz berdi" });
   }
 });
 
@@ -243,13 +283,33 @@ router.post('/:id/reject', authenticateToken, async (req: AuthRequest, res: Resp
 
     await db.updateBookingRequestStatus(id, 'rejected');
 
+    // If client is a registered user, send push & in-app notification
+    const clientUser = await db.getUserByPhone(request.clientPhone);
+    if (clientUser) {
+      await db.createNotification({
+        userId: clientUser.id,
+        type: 'booking_rejected',
+        title: "So'rovingiz rad etildi",
+        body: `${request.date} soat ${request.time} dagi vaqt band yoki bekor qilindi.`,
+        data: { requestId: id },
+      }).catch(() => {});
+
+      try {
+        await pushService.sendNotificationToUser(clientUser.id, {
+          title: "So'rovingiz rad etildi",
+          body: `${request.date} soat ${request.time} dagi vaqt band yoki bekor qilindi.`,
+          data: { screen: 'myAppointments', url: '/yozuvlarim' },
+        });
+      } catch (_) {}
+    }
+
     res.json({
       success: true,
       message: "So'rov rad etildi",
     });
   } catch (error) {
-    console.error('[BookingRequests reject POST error]:', error);
-    res.status(500).json({ error: 'Soʻrovni rad etishda xatolik yuz berdi' });
+    console.error('[BookingRequests reject error]:', error);
+    res.status(500).json({ error: "So'rovni rad etishda xatolik yuz berdi" });
   }
 });
 

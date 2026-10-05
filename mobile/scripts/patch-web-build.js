@@ -23,8 +23,8 @@ const indexHtmlPath = path.join(distDir, 'index.html');
 if (fs.existsSync(indexHtmlPath)) {
   let html = fs.readFileSync(indexHtmlPath, 'utf8');
 
-  // Ensure title is BarberPlan
-  html = html.replace(/<title>.*?<\/title>/gi, '<title>BarberPlan - Go\'zallik va sartaroshlik ustalari uchun CRM</title>');
+  // Ensure title is Barbero
+  html = html.replace(/<title>.*?<\/title>/gi, '<title>Barbero - Go\'zallik va sartaroshlik ustalari uchun CRM</title>');
 
   // Ensure viewport has viewport-fit=cover
   if (!html.includes('viewport-fit=cover')) {
@@ -36,12 +36,12 @@ if (fs.existsSync(indexHtmlPath)) {
 
   // Inject PWA meta tags if not present
   const metaTags = `
-    <!-- BarberPlan PWA Meta Tags -->
+    <!-- Barbero PWA Meta Tags -->
     <link rel="manifest" href="/manifest.json" />
     <meta name="theme-color" content="#2563EB" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="BarberPlan" />
+    <meta name="apple-mobile-web-app-title" content="Barbero" />
     <link rel="apple-touch-icon" href="/icon-180.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/icon-180.png" />
     <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />

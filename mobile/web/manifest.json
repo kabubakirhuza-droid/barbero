@@ -1,10 +1,10 @@
 {
-  "name": "BarberPlan",
-  "short_name": "BarberPlan",
-  "description": "BarberPlan - Go'zallik va sartaroshlik ustalari uchun CRM",
+  "name": "Barbero",
+  "short_name": "Barbero",
+  "description": "Barbero - Go'zallik va sartaroshlik ustalari uchun CRM va mijozlar uchun qulay yozilish",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#F8FAFC",
+  "background_color": "#F7F8FA",
   "theme_color": "#2563EB",
   "orientation": "portrait",
   "icons": [

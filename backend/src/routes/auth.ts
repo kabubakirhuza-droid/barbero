@@ -27,18 +27,33 @@ router.post('/send-code', async (req: Request, res: Response): Promise<void> => 
 
     const cleanPhone = normalizePhone(phone);
     if (!/^\+998\d{9}$/.test(cleanPhone)) {
-      res.status(400).json({ error: "Telefon raqami +998XXXXXXXXX formatida bo‘lishi kerak (masalan, +998901234567)" });
+      res.status(400).json({
+        error: "Telefon raqami +998XXXXXXXXX formatida bo‘lishi kerak (masalan, +998901234567)",
+      });
       return;
     }
 
-    // Persistent rate limit check: 1 send per 60 seconds
+    // Ensure DB is initialized
+    await db.initDb().catch((err) => console.warn('[Auth /send-code] DB Init notice:', err.message));
+
+    // Persistent rate limit check: 1 send per 60 seconds (strictly in database otp_requests table)
     const existing = await db.getOtpSession(cleanPhone);
     const now = Date.now();
     if (existing && now - existing.lastSentAt < config.rateLimitSeconds * 1000) {
-      const remainingSeconds = Math.ceil((config.rateLimitSeconds * 1000 - (now - existing.lastSentAt)) / 1000);
+      const remainingSeconds = Math.ceil(
+        (config.rateLimitSeconds * 1000 - (now - existing.lastSentAt)) / 1000
+      );
       res.status(429).json({
         error: `Iltimos, qayta yuborishdan oldin ${remainingSeconds} soniya kuting`,
         retryAfter: remainingSeconds,
+      });
+      return;
+    }
+
+    if (!config.telegramGatewayToken) {
+      console.error('[Auth /send-code] TELEGRAM_GATEWAY_TOKEN is not configured');
+      res.status(503).json({
+        error: 'Telegram Gateway xizmati vaqtincha sozlanmagan',
       });
       return;
     }
@@ -47,25 +62,28 @@ router.post('/send-code', async (req: Request, res: Response): Promise<void> => 
     const result = await telegramGateway.sendVerificationMessage(cleanPhone);
 
     if (!result.success || !result.requestId) {
+      console.warn(`[Auth /send-code] Telegram Gateway verification failed for ${cleanPhone.slice(0, 6)}***${cleanPhone.slice(-3)}: ${result.error}`);
       res.status(400).json({
         error: result.error || "Telegram orqali kod yuborishda xatolik yuz berdi",
       });
       return;
     }
 
-    // Save session persistently in DB
+    // Save session in PostgreSQL otp_requests table
     await db.saveOtpSession(cleanPhone, result.requestId);
 
     res.json({
       success: true,
-      message: 'Tasdiqlash kodi telefoningizga yuborildi',
+      message: 'Tasdiqlash kodi Telegram ilovangizga yuborildi',
       requestId: result.requestId,
       phone: cleanPhone,
       ttl: 60,
     });
   } catch (error: any) {
     console.error('[Auth Error /send-code]:', error);
-    res.status(500).json({ error: 'Kodni yuborishda server xatoligi yuz berdi' });
+    res.status(500).json({
+      error: 'Kodni yuborishda server xatoligi yuz berdi',
+    });
   }
 });
 
@@ -80,7 +98,7 @@ router.post('/verify', async (req: Request, res: Response): Promise<void> => {
     }
 
     const cleanCode = String(code).trim();
-    if (cleanCode.length !== 6) {
+    if (cleanCode.length !== 6 || !/^\d{6}$/.test(cleanCode)) {
       res.status(400).json({ error: 'Kod 6 ta raqamdan iborat bo‘lishi kerak' });
       return;
     }
@@ -91,56 +109,74 @@ router.post('/verify', async (req: Request, res: Response): Promise<void> => {
       session = await db.getOtpSessionByRequestId(requestId);
     }
 
-    if (!session) {
+    if (!session && !requestId) {
       res.status(400).json({
         error: "Tasdiqlash sessiyasi topilmadi yoki muddati o'tgan. Iltimos, kodni qayta yuboring",
       });
       return;
     }
 
-    // Limit to max 5 attempts
-    if (session.attempts >= config.maxVerificationAttempts) {
+    const activeRequestId = requestId || session?.requestId;
+    const targetPhone = cleanPhone || session?.phone;
+
+    // Limit to max 5 attempts per session
+    if (session && session.attempts >= config.maxVerificationAttempts) {
       res.status(429).json({
         error: "Kodni kiritish urinishlari soni tugadi (5 ta). Iltimos, yangi kod so'rang",
       });
       return;
     }
 
-    // Strictly verify via Telegram Gateway API
-    const checkResult = await telegramGateway.checkVerificationStatus(session.requestId, cleanCode);
+    if (!config.telegramGatewayToken) {
+      res.status(503).json({ error: 'Telegram Gateway xizmati sozlanmagan' });
+      return;
+    }
+
+    // Verify status strictly with Telegram Gateway API
+    const checkResult = await telegramGateway.checkVerificationStatus(activeRequestId, cleanCode);
 
     if (!checkResult.codeValid) {
-      const attempts = await db.incrementOtpAttempts(session.phone);
-      const remainingAttempts = Math.max(0, config.maxVerificationAttempts - attempts);
+      if (session) {
+        await db.incrementOtpAttempts(session.phone);
+      }
+      const attemptsLeft = session ? Math.max(0, config.maxVerificationAttempts - (session.attempts + 1)) : 4;
       res.status(400).json({
-        error: "Kiritilgan kod noto'g'ri",
+        error: checkResult.error || "Kiritilgan kod noto'g'ri",
         codeValid: false,
-        attemptsLeft: remainingAttempts,
+        attemptsLeft,
       });
       return;
     }
 
-    // Verification successful! Clear session
-    await db.deleteOtpSession(session.phone);
+    // Verification successful! Delete session from database
+    if (session) {
+      await db.deleteOtpSession(session.phone);
+    }
 
-    const userPhone = session.phone;
-    let user = await db.getUserByPhone(userPhone);
+    const userPhone = targetPhone || cleanPhone;
+    let user = userPhone ? await db.getUserByPhone(userPhone) : null;
     let isNewUser = false;
 
     if (!user) {
       isNewUser = true;
+      const safePhone = userPhone || `+998900000000`;
       user = await db.createUser({
-        id: `u-${Date.now()}`,
-        phone: userPhone,
+        id: `u-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+        phone: safePhone,
         ism: '',
         familiya: '',
         fullName: '',
-        username: `user_${userPhone.slice(-4)}`,
+        username: `user_${safePhone.slice(-4)}_${Math.floor(100 + Math.random() * 900)}`,
         role: 'MASTER',
         createdAt: new Date().toISOString(),
       });
     } else if (!user.ism || !user.familiya) {
       isNewUser = true;
+    }
+
+    if (!config.jwtSecret || !config.jwtRefreshSecret) {
+      res.status(503).json({ error: 'Serverda JWT kalitlari sozlanmagan' });
+      return;
     }
 
     // Generate real JWT Access & Refresh tokens
@@ -169,6 +205,59 @@ router.post('/verify', async (req: Request, res: Response): Promise<void> => {
   } catch (error: any) {
     console.error('[Auth Error /verify]:', error);
     res.status(500).json({ error: 'Tasdiqlashda xatolik yuz berdi' });
+  }
+});
+
+// POST /auth/refresh - Refresh Access Token using valid Refresh Token
+router.post('/refresh', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { refreshToken } = req.body;
+    if (!refreshToken) {
+      res.status(401).json({ error: 'Refresh token kiritilishi shart' });
+      return;
+    }
+
+    if (!config.jwtRefreshSecret || !config.jwtSecret) {
+      res.status(503).json({ error: 'Serverda JWT kalitlari sozlanmagan' });
+      return;
+    }
+
+    let decoded: any;
+    try {
+      decoded = jwt.verify(refreshToken, config.jwtRefreshSecret);
+    } catch {
+      res.status(401).json({ error: 'Yaroqsiz yoki muddati o‘tgan refresh token' });
+      return;
+    }
+
+    const user = await db.getUserById(decoded.userId);
+    if (!user) {
+      res.status(401).json({ error: 'Foydalanuvchi topilmadi' });
+      return;
+    }
+
+    const newAccessToken = jwt.sign(
+      { userId: user.id, phone: user.phone, username: user.username, role: user.role },
+      config.jwtSecret,
+      { expiresIn: '30d' }
+    );
+
+    const newRefreshToken = jwt.sign(
+      { userId: user.id },
+      config.jwtRefreshSecret,
+      { expiresIn: '90d' }
+    );
+
+    res.json({
+      success: true,
+      tokens: {
+        accessToken: newAccessToken,
+        refreshToken: newRefreshToken,
+      },
+    });
+  } catch (error) {
+    console.error('[Auth Error /refresh]:', error);
+    res.status(500).json({ error: 'Tokenni yangilashda xatolik yuz berdi' });
   }
 });
 

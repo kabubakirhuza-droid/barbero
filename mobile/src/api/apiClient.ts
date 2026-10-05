@@ -469,6 +469,85 @@ class ApiClient {
   async getPushStatus(): Promise<{ active: boolean; isSubscribed: boolean; count: number; subscriptionsCount: number; subscriptions: any[] }> {
     return this.request('/push/status');
   }
+
+  // --- Call Log ---
+  async getCallLogs(limit: number = 20): Promise<{ success: boolean; callLogs: any[]; count: number }> {
+    return this.request(`/call-log?limit=${limit}`);
+  }
+
+  async addCallLog(phone: string, name?: string, direction: string = 'outgoing_call'): Promise<{ success: boolean; callLog: any }> {
+    return this.request('/call-log', {
+      method: 'POST',
+      body: JSON.stringify({ phone, name, direction }),
+    });
+  }
+
+  // --- Blocked Slots (Dam olish) ---
+  async getBlockedSlots(date?: string): Promise<{ success: boolean; blockedSlots: any[]; count: number }> {
+    const query = date ? `?date=${date}` : '';
+    return this.request(`/blocked-slots${query}`);
+  }
+
+  async createBlockedSlot(slot: { appointmentDate: string; startTime: string; endTime?: string; reason?: string }): Promise<{ success: boolean; blockedSlot: any }> {
+    return this.request('/blocked-slots', {
+      method: 'POST',
+      body: JSON.stringify(slot),
+    });
+  }
+
+  async deleteBlockedSlot(id: string): Promise<{ success: boolean }> {
+    return this.request(`/blocked-slots/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  // --- Appointment Status & Reschedule ---
+  async updateAppointmentStatus(id: string, status: string): Promise<{ success: boolean; appointment: Appointment }> {
+    return this.request(`/appointments/${id}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    });
+  }
+
+  async rescheduleAppointment(id: string, newDate: string, newStartTime: string): Promise<{ success: boolean; appointment: Appointment }> {
+    return this.request(`/appointments/${id}/reschedule`, {
+      method: 'POST',
+      body: JSON.stringify({ newDate, newStartTime }),
+    });
+  }
+
+  // --- Legal Documents ---
+  async getLegalDocuments(): Promise<{ success: boolean; documents: any[] }> {
+    return this.request('/legal');
+  }
+
+  async getLegalDocument(slug: string): Promise<{ success: boolean; document: any }> {
+    return this.request(`/legal/${slug}`);
+  }
+
+  async acceptLegalDocument(slug: string, version?: string): Promise<{ success: boolean }> {
+    return this.request('/legal/accept', {
+      method: 'POST',
+      body: JSON.stringify({ slug, version: version || '1.0' }),
+    });
+  }
+
+  // --- Notifications ---
+  async getNotifications(): Promise<{ success: boolean; notifications: any[]; count: number; unreadCount: number }> {
+    return this.request('/notifications');
+  }
+
+  async markNotificationRead(id: string): Promise<{ success: boolean }> {
+    return this.request(`/notifications/${id}/read`, {
+      method: 'PATCH',
+    });
+  }
+
+  async markAllNotificationsRead(): Promise<{ success: boolean }> {
+    return this.request('/notifications/read-all', {
+      method: 'POST',
+    });
+  }
 }
 
 export const api = new ApiClient();

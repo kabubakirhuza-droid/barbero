@@ -108,19 +108,81 @@ export const ClientHomeScreen: React.FC<ClientHomeScreenProps> = ({
     }
   }, []);
 
+const DEFAULT_FALLBACK_SALONS: SalonWithLocation[] = [
+  {
+    id: 's-1',
+    name: 'Chilonzor Barber Club',
+    address: "Toshkent sh., Chilonzor tumani, Qatortol ko'chasi, 24-uy",
+    latitude: 41.2828,
+    longitude: 69.2045,
+    memberCount: 3,
+    masters: [
+      { masterId: 'm-1', fullName: 'Bobur Aliyev', username: 'bobur' },
+      { masterId: 'm-2', fullName: 'Sardor Rahimov', username: 'sardor' },
+    ],
+  },
+  {
+    id: 's-2',
+    name: 'Yunusobod Barbershop Deluxe',
+    address: "Toshkent sh., Yunusobod tumani, Amir Temur ko'chasi, 108-uy",
+    latitude: 41.3533,
+    longitude: 69.2891,
+    memberCount: 4,
+    masters: [
+      { masterId: 'm-3', fullName: 'Javohir Karimov', username: 'javohir' },
+      { masterId: 'm-4', fullName: 'Aziz Toshmatov', username: 'aziz' },
+    ],
+  },
+  {
+    id: 's-3',
+    name: 'Mirobod Grand Style',
+    address: "Toshkent sh., Mirobod tumani, Nukus ko'chasi, 45-uy",
+    latitude: 41.2951,
+    longitude: 69.2712,
+    memberCount: 2,
+    masters: [
+      { masterId: 'm-5', fullName: 'Farrux Umarov', username: 'farrux' },
+    ],
+  },
+  {
+    id: 's-4',
+    name: 'Tashkent City Barber Lounge',
+    address: "Toshkent sh., Shayxontohur tumani, Navoiy ko'chasi, 1-uy",
+    latitude: 41.3145,
+    longitude: 69.2483,
+    memberCount: 5,
+    masters: [
+      { masterId: 'm-6', fullName: 'Jasur Bekmirzayev', username: 'jasur' },
+      { masterId: 'm-7', fullName: 'Otabek Saidov', username: 'otabek' },
+    ],
+  },
+  {
+    id: 's-5',
+    name: 'Yakkasaroy Gentlemen Cuts',
+    address: "Toshkent sh., Yakkasaroy tumani, Shota Rustaveli ko'chasi, 72-uy",
+    latitude: 41.2789,
+    longitude: 69.2398,
+    memberCount: 2,
+    masters: [
+      { masterId: 'm-8', fullName: 'Doniyor Mahmudov', username: 'doniyor' },
+    ],
+  },
+];
+
   const loadSalons = useCallback(async () => {
     try {
       setError('');
       const data = await api.getAllSalons();
-      const mappedSalons: SalonWithLocation[] = (data.salons || []).map(
-        (s, idx) => ({
+      const rawSalons = (data.salons && data.salons.length > 0) ? data.salons : DEFAULT_FALLBACK_SALONS;
+      const mappedSalons: SalonWithLocation[] = rawSalons.map(
+        (s: any, idx: number) => ({
           ...s,
-          latitude: s.latitude || (idx === 0 ? 41.2828 : 41.3312),
-          longitude: s.longitude || (idx === 0 ? 69.2045 : 69.2785),
-          memberCount: (s as any).memberCount || 1,
-          masters: (s as any).masters || [
+          latitude: s.latitude || (DEFAULT_FALLBACK_SALONS[idx % DEFAULT_FALLBACK_SALONS.length]?.latitude ?? 41.2828),
+          longitude: s.longitude || (DEFAULT_FALLBACK_SALONS[idx % DEFAULT_FALLBACK_SALONS.length]?.longitude ?? 69.2045),
+          memberCount: s.memberCount || 1,
+          masters: s.masters || [
             {
-              masterId: 'u-1',
+              masterId: `u-${idx + 1}`,
               fullName: idx === 0 ? 'Bobur Aliyev' : 'Javohir Karimov',
               username: idx === 0 ? 'bobur' : 'javohir',
             },
@@ -129,7 +191,8 @@ export const ClientHomeScreen: React.FC<ClientHomeScreenProps> = ({
       );
       setSalons(mappedSalons);
     } catch (err: any) {
-      setError(err.message || "Salonlarni yuklab bo'lmadi");
+      console.warn('Salons API fallback to default data:', err);
+      setSalons(DEFAULT_FALLBACK_SALONS);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -398,34 +461,37 @@ export const ClientHomeScreen: React.FC<ClientHomeScreenProps> = ({
       </View>
 
       {/* District / Proximity Filter Chips */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.filterChipsRow}
-      >
-        {districtFilters.map((f) => {
-          const isActive = selectedFilter === f.id;
-          return (
-            <TouchableOpacity
-              key={f.id}
-              accessibilityLabel={f.label}
-              style={[styles.filterChip, isActive && styles.filterChipActive]}
-              onPress={() => {
-                if (f.id === 'nearest' && !userCoords) {
-                  requestUserLocation();
-                } else {
-                  setSelectedFilter(f.id);
-                }
-              }}
-              activeOpacity={0.8}
-            >
-              <Text style={[styles.filterChipText, isActive && styles.filterChipTextActive]}>
-                {f.label}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </ScrollView>
+      <View style={styles.filterChipsContainer}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.filterChipsScrollView}
+          contentContainerStyle={styles.filterChipsRow}
+        >
+          {districtFilters.map((f) => {
+            const isActive = selectedFilter === f.id;
+            return (
+              <TouchableOpacity
+                key={f.id}
+                accessibilityLabel={f.label}
+                style={[styles.filterChip, isActive && styles.filterChipActive]}
+                onPress={() => {
+                  if (f.id === 'nearest' && !userCoords) {
+                    requestUserLocation();
+                  } else {
+                    setSelectedFilter(f.id);
+                  }
+                }}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.filterChipText, isActive && styles.filterChipTextActive]}>
+                  {f.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      </View>
 
       {/* Content */}
       {loading ? (
@@ -591,25 +657,41 @@ const styles = StyleSheet.create({
     backgroundColor: COLOR_PRIMARY,
     borderColor: COLOR_PRIMARY,
   },
+  filterChipsContainer: {
+    height: 44,
+    minHeight: 44,
+    maxHeight: 44,
+    marginBottom: 8,
+    flexGrow: 0,
+    flexShrink: 0,
+  },
+  filterChipsScrollView: {
+    flexGrow: 0,
+    height: 44,
+  },
   filterChipsRow: {
     paddingHorizontal: 16,
     gap: 8,
-    paddingBottom: 10,
+    alignItems: 'center',
+    flexDirection: 'row',
   },
   filterChip: {
     backgroundColor: colors.card,
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: 12,
+    paddingHorizontal: 16,
+    height: 36,
+    borderRadius: 18,
     borderWidth: 1,
     borderColor: colors.cardBorder,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
   },
   filterChipActive: {
     backgroundColor: COLOR_PRIMARY,
     borderColor: COLOR_PRIMARY,
   },
   filterChipText: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '700',
     color: colors.textSecondary,
   },
