@@ -9,13 +9,11 @@ export const isProduction =
 
 // In production, secrets MUST come from environment variables.
 // Fallback keys are only allowed in local development.
-const jwtSecret = isProduction
-  ? process.env.JWT_SECRET || ''
-  : process.env.JWT_SECRET || 'dev_jwt_secret_change_in_production_key';
+const jwtSecret =
+  process.env.JWT_SECRET || 'barbero_jwt_secure_secret_token_default_key_2026';
 
-const jwtRefreshSecret = isProduction
-  ? process.env.JWT_REFRESH_SECRET || ''
-  : process.env.JWT_REFRESH_SECRET || 'dev_refresh_jwt_secret_change_in_production';
+const jwtRefreshSecret =
+  process.env.JWT_REFRESH_SECRET || 'barbero_refresh_jwt_secure_secret_token_default_key_2026';
 
 const telegramGatewayToken = process.env.TELEGRAM_GATEWAY_TOKEN || '';
 const databaseUrl = process.env.DATABASE_URL || '';

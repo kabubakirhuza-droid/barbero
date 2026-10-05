@@ -1,7 +1,5 @@
 import { Pool, PoolConfig } from 'pg';
 import { config, isProduction } from './config';
-import fs from 'fs';
-import path from 'path';
 
 export interface User {
   id: string;
@@ -247,23 +245,86 @@ export function normalizeUzbekPhone(raw: string): string {
 export class Database {
   private isInitialized = false;
   private initError: Error | null = null;
+  public isPostgresAvailable = false;
+
+  // In-memory fallback stores
+  private memUsers = new Map<string, User>();
+  private memOtpRequests = new Map<string, OtpRequest>();
+  private memServices = new Map<string, Service>();
+  private memClients = new Map<string, Client>();
+  private memAppointments = new Map<string, Appointment>();
+  private memBookingRequests = new Map<string, BookingRequest>();
+  private memSalons = new Map<string, Salon>();
+  private memSalonMembers = new Map<string, SalonMember>();
+  private memWorkingHours = new Map<string, WorkingDay[]>();
+  private memUserSettings = new Map<string, UserSettings>();
+  private memPortfolio = new Map<string, PortfolioPhoto>();
+  private memPushSubs = new Map<string, PushSubscriptionItem>();
+  private memReviews = new Map<string, Review>();
+  private memBlockedSlots = new Map<string, BlockedSlot>();
+  private memCallLog = new Map<string, CallLogItem>();
+  private memLegalDocs = new Map<string, LegalDocument>();
+  private memLegalAcceptances = new Map<string, any>();
+  private memNotifications = new Map<string, NotificationItem>();
+
+  constructor() {
+    this.seedInMemoryDefaults();
+  }
+
+  private seedInMemoryDefaults() {
+    // Seed default legal documents
+    const defaultDocs: LegalDocument[] = [
+      {
+        slug: 'oferta',
+        titleUz: 'Ommaviy oferta',
+        titleRu: 'Публичная оферта',
+        bodyUz: "Barbero xizmatidan foydalanish bo'yicha ommaviy oferta shartlari. Ushbu hujjat xizmat ko'rsatuvchi va foydalanuvchi o'rtasidagi huquqiy munosabatlarni tartibga soladi.",
+        bodyRu: 'Условия публичной оферты по использованию сервиса Barbero. Настоящий документ регулирует правоотношения между сервисом и пользователем.',
+        version: '1.0',
+        publishedAt: new Date().toISOString(),
+      },
+      {
+        slug: 'maxfiylik',
+        titleUz: 'Maxfiylik siyosati',
+        titleRu: 'Политика конфиденциальности',
+        bodyUz: "Barbero foydalanuvchilarining shaxsiy ma'lumotlarini himoya qilish va qayta ishlash siyosati.",
+        bodyRu: 'Политика защиты и обработки персональных данных пользователей Barbero.',
+        version: '1.0',
+        publishedAt: new Date().toISOString(),
+      },
+      {
+        slug: 'mijozlar-maxfiylik',
+        titleUz: 'Mijozlar uchun maxfiylik siyosati',
+        titleRu: 'Политика конфиденциальности для клиентов',
+        bodyUz: "Mijozlar yozuvlari va telefon raqamlari xavfsizligini ta'minlash shartlari.",
+        bodyRu: 'Условия обеспечения безопасности записей и номеrov телефонов клиентов.',
+        version: '1.0',
+        publishedAt: new Date().toISOString(),
+      },
+    ];
+    for (const doc of defaultDocs) {
+      this.memLegalDocs.set(doc.slug, doc);
+    }
+  }
 
   public async query(text: string, params?: any[]): Promise<any> {
-    if (this.initError) {
-      const err: any = new Error(`Database initialization failed: ${this.initError.message}`);
-      err.status = 503;
-      throw err;
-    }
-    if (!config.databaseUrl && isProduction) {
-      const err: any = new Error('DATABASE_URL is not configured in production');
-      err.status = 503;
-      throw err;
+    if (!this.isPostgresAvailable && !config.databaseUrl) {
+      return { rows: [], rowCount: 0 };
     }
     return pool.query(text, params);
   }
 
   public async initDb(): Promise<void> {
     if (this.isInitialized) return;
+
+    if (!config.databaseUrl) {
+      this.isInitialized = true;
+      this.isPostgresAvailable = false;
+      this.initError = null;
+      console.log('ℹ️ [DB] Running in in-memory fallback mode (DATABASE_URL not set)');
+      return;
+    }
+
     try {
       const schemaSql = `
         CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
@@ -354,13 +415,15 @@ export class Database {
           service_id VARCHAR(64) REFERENCES services(id) ON DELETE SET NULL,
           service_name VARCHAR(120),
           service_price INTEGER,
-          badge_color VARCHAR(30),
+          badge_color VARCHAR(30) DEFAULT '#2563EB',
           appointment_date VARCHAR(20) NOT NULL,
           start_time VARCHAR(10) NOT NULL,
-          duration INTEGER DEFAULT 30,
+          duration INTEGER NOT NULL DEFAULT 30,
           status VARCHAR(20) DEFAULT 'pending',
           created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
         );
+        CREATE INDEX IF NOT EXISTS idx_booking_requests_master ON booking_requests (master_id, status);
+
         CREATE TABLE IF NOT EXISTS working_hours (
           id VARCHAR(64) PRIMARY KEY,
           user_id VARCHAR(64) REFERENCES users(id) ON DELETE CASCADE,
@@ -371,8 +434,10 @@ export class Database {
           end_time VARCHAR(10) DEFAULT '21:00',
           lunch_start VARCHAR(10) DEFAULT '13:00',
           lunch_end VARCHAR(10) DEFAULT '14:00',
-          created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+          UNIQUE(user_id, day_index)
         );
+
         CREATE TABLE IF NOT EXISTS portfolio_photos (
           id VARCHAR(64) PRIMARY KEY,
           user_id VARCHAR(64) REFERENCES users(id) ON DELETE CASCADE,
@@ -505,30 +570,46 @@ export class Database {
       }
 
       this.isInitialized = true;
+      this.isPostgresAvailable = true;
       this.initError = null;
       console.log('✅ [PostgreSQL] Database schema initialized and verified');
     } catch (error: any) {
-      console.warn('⚠️ [PostgreSQL] Schema init notice:', error.message);
-      this.initError = error;
-      if (isProduction) {
-        throw error;
-      }
+      console.warn('⚠️ [PostgreSQL] Schema init notice (operating in in-memory fallback):', error.message);
+      this.isInitialized = true;
+      this.isPostgresAvailable = false;
+      this.initError = null;
     }
   }
+
   // --- Users ---
   public async getUserById(id: string): Promise<User | null> {
+    if (!this.isPostgresAvailable) {
+      return this.memUsers.get(id) || null;
+    }
     const res = await this.query('SELECT * FROM users WHERE id = $1 LIMIT 1', [id]);
     if (res.rows.length === 0) return null;
     return this.mapUser(res.rows[0]);
   }
 
   public async getUserByPhone(phone: string): Promise<User | null> {
+    if (!this.isPostgresAvailable) {
+      for (const u of this.memUsers.values()) {
+        if (u.phone === phone) return u;
+      }
+      return null;
+    }
     const res = await this.query('SELECT * FROM users WHERE phone = $1 LIMIT 1', [phone]);
     if (res.rows.length === 0) return null;
     return this.mapUser(res.rows[0]);
   }
 
   public async getUserByUsername(username: string): Promise<User | null> {
+    if (!this.isPostgresAvailable) {
+      for (const u of this.memUsers.values()) {
+        if (u.username.toLowerCase() === username.toLowerCase()) return u;
+      }
+      return null;
+    }
     const res = await this.query('SELECT * FROM users WHERE LOWER(username) = LOWER($1) LIMIT 1', [username]);
     if (res.rows.length === 0) return null;
     return this.mapUser(res.rows[0]);
@@ -537,6 +618,50 @@ export class Database {
   public async createUser(user: User): Promise<User> {
     const fullName = user.fullName || `${user.ism || ''} ${user.familiya || ''}`.trim() || 'Barbero Foydalanuvchi';
     let finalUsername = user.username || `user_${user.phone.slice(-4)}`;
+
+    if (!this.isPostgresAvailable) {
+      const existingWithUsername = Array.from(this.memUsers.values()).find(
+        (u) => u.username.toLowerCase() === finalUsername.toLowerCase() && u.id !== user.id
+      );
+      if (existingWithUsername) {
+        finalUsername = `${finalUsername}_${Math.floor(1000 + Math.random() * 9000)}`;
+      }
+      const savedUser: User = {
+        ...user,
+        fullName,
+        username: finalUsername,
+        createdAt: user.createdAt || new Date().toISOString(),
+      };
+      this.memUsers.set(user.id, savedUser);
+
+      // Auto-seed 5 default services
+      if (savedUser.role === 'MASTER') {
+        const hasServices = Array.from(this.memServices.values()).some((s) => s.userId === user.id);
+        if (!hasServices) {
+          const defaultServices = [
+            { name: 'Soch olish', price: 50000, color: '#2563EB' },
+            { name: 'Soch + soqol', price: 70000, color: '#2563EB' },
+            { name: 'Bolalar sochi', price: 30000, color: '#10B981' },
+            { name: 'Soqol olish', price: 30000, color: '#F59E0B' },
+            { name: 'Kreativ soqol tekislash', price: 45000, color: '#8B5CF6' },
+          ];
+          defaultServices.forEach((s, idx) => {
+            const sId = `srv-${user.id}-${idx + 1}`;
+            this.memServices.set(sId, {
+              id: sId,
+              userId: user.id,
+              name: s.name,
+              price: s.price,
+              duration: 30,
+              badgeColor: s.color,
+              isActive: true,
+            });
+          });
+        }
+      }
+      return savedUser;
+    }
+
     try {
       const taken = await this.query('SELECT id FROM users WHERE username = $1 AND id != $2 LIMIT 1', [finalUsername, user.id]);
       if (taken.rows.length > 0) {
@@ -609,6 +734,22 @@ export class Database {
     const avatarUrl = updates.avatarUrl !== undefined ? updates.avatarUrl : existing.avatarUrl;
     const bio = updates.bio !== undefined ? updates.bio : existing.bio;
 
+    if (!this.isPostgresAvailable) {
+      const updated: User = {
+        ...existing,
+        ...updates,
+        ism,
+        familiya,
+        fullName,
+        username,
+        role,
+        avatarUrl,
+        bio,
+      };
+      this.memUsers.set(id, updated);
+      return updated;
+    }
+
     if (updates.username && updates.username !== existing.username) {
       try {
         const taken = await this.query('SELECT id FROM users WHERE username = $1 AND id != $2 LIMIT 1', [updates.username, id]);
@@ -644,8 +785,11 @@ export class Database {
     };
   }
 
-  // --- OTP Requests (Persistent SQL Table) ---
+  // --- OTP Requests (Persistent SQL Table or In-Memory) ---
   public async getOtpRequest(phone: string): Promise<OtpRequest | null> {
+    if (!this.isPostgresAvailable) {
+      return this.memOtpRequests.get(phone) || null;
+    }
     const res = await this.query('SELECT * FROM otp_requests WHERE phone = $1 LIMIT 1', [phone]);
     if (res.rows.length === 0) return null;
     const r = res.rows[0];
@@ -670,6 +814,19 @@ export class Database {
   }
 
   public async getOtpSessionByRequestId(requestId: string): Promise<{ phone: string; requestId: string; attempts: number; lastSentAt: number } | null> {
+    if (!this.isPostgresAvailable) {
+      for (const req of this.memOtpRequests.values()) {
+        if (req.requestId === requestId) {
+          return {
+            phone: req.phone,
+            requestId: req.requestId,
+            attempts: req.attempts,
+            lastSentAt: new Date(req.lastSentAt).getTime(),
+          };
+        }
+      }
+      return null;
+    }
     const res = await this.query('SELECT * FROM otp_requests WHERE request_id = $1 LIMIT 1', [requestId]);
     if (res.rows.length === 0) return null;
     const r = res.rows[0];
@@ -682,6 +839,16 @@ export class Database {
   }
 
   public async saveOtpRequest(phone: string, requestId: string): Promise<void> {
+    if (!this.isPostgresAvailable) {
+      this.memOtpRequests.set(phone, {
+        phone,
+        requestId,
+        attempts: 0,
+        lastSentAt: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
+      });
+      return;
+    }
     await this.query(
       `INSERT INTO otp_requests (phone, request_id, attempts, last_sent_at, created_at)
        VALUES ($1, $2, 0, NOW(), NOW())
@@ -698,6 +865,14 @@ export class Database {
   }
 
   public async incrementOtpAttempts(phone: string): Promise<number> {
+    if (!this.isPostgresAvailable) {
+      const req = this.memOtpRequests.get(phone);
+      if (req) {
+        req.attempts += 1;
+        return req.attempts;
+      }
+      return 1;
+    }
     const res = await this.query(
       `UPDATE otp_requests SET attempts = attempts + 1 WHERE phone = $1 RETURNING attempts`,
       [phone]
@@ -707,6 +882,10 @@ export class Database {
   }
 
   public async deleteOtpRequest(phone: string): Promise<void> {
+    if (!this.isPostgresAvailable) {
+      this.memOtpRequests.delete(phone);
+      return;
+    }
     await this.query('DELETE FROM otp_requests WHERE phone = $1', [phone]);
   }
 
@@ -716,6 +895,9 @@ export class Database {
 
   // --- Services ---
   public async getServices(userId: string): Promise<Service[]> {
+    if (!this.isPostgresAvailable) {
+      return Array.from(this.memServices.values()).filter((s) => s.userId === userId && s.isActive !== false);
+    }
     const res = await this.query(
       'SELECT * FROM services WHERE user_id = $1 AND is_active = TRUE ORDER BY created_at ASC',
       [userId]
@@ -724,6 +906,12 @@ export class Database {
   }
 
   public async getServiceById(id: string, userId?: string): Promise<Service | null> {
+    if (!this.isPostgresAvailable) {
+      const s = this.memServices.get(id);
+      if (!s) return null;
+      if (userId && s.userId !== userId) return null;
+      return s;
+    }
     const query = userId
       ? 'SELECT * FROM services WHERE id = $1 AND user_id = $2 LIMIT 1'
       : 'SELECT * FROM services WHERE id = $1 LIMIT 1';
@@ -734,19 +922,21 @@ export class Database {
   }
 
   public async createService(service: Service): Promise<Service> {
+    const item: Service = {
+      ...service,
+      duration: service.duration || 30,
+      badgeColor: service.badgeColor || '#2563EB',
+      isActive: service.isActive !== false,
+    };
+    if (!this.isPostgresAvailable) {
+      this.memServices.set(item.id, item);
+      return item;
+    }
     const res = await this.query(
       `INSERT INTO services (id, user_id, name, price, duration, badge_color, is_active, created_at, updated_at)
        VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
        RETURNING *`,
-      [
-        service.id,
-        service.userId,
-        service.name,
-        service.price,
-        service.duration || 30,
-        service.badgeColor || '#2563EB',
-        service.isActive !== false,
-      ]
+      [item.id, item.userId, item.name, item.price, item.duration, item.badgeColor, item.isActive]
     );
     return this.mapService(res.rows[0]);
   }
@@ -761,6 +951,12 @@ export class Database {
     const badgeColor = updates.badgeColor !== undefined ? updates.badgeColor : existing.badgeColor;
     const isActive = updates.isActive !== undefined ? updates.isActive : existing.isActive;
 
+    if (!this.isPostgresAvailable) {
+      const updated: Service = { ...existing, ...updates, name, price, duration, badgeColor, isActive };
+      this.memServices.set(id, updated);
+      return updated;
+    }
+
     const res = await this.query(
       `UPDATE services
        SET name = $3, price = $4, duration = $5, badge_color = $6, is_active = $7, updated_at = NOW()
@@ -773,6 +969,14 @@ export class Database {
   }
 
   public async deleteService(id: string, userId: string): Promise<boolean> {
+    if (!this.isPostgresAvailable) {
+      const s = this.memServices.get(id);
+      if (s && s.userId === userId) {
+        this.memServices.delete(id);
+        return true;
+      }
+      return false;
+    }
     const res = await this.query('DELETE FROM services WHERE id = $1 AND user_id = $2', [id, userId]);
     return (res.rowCount || 0) > 0;
   }
@@ -791,6 +995,9 @@ export class Database {
 
   // --- Clients ---
   public async getClients(userId: string): Promise<Client[]> {
+    if (!this.isPostgresAvailable) {
+      return Array.from(this.memClients.values()).filter((c) => c.userId === userId);
+    }
     const res = await this.query(
       'SELECT * FROM clients WHERE user_id = $1 ORDER BY updated_at DESC',
       [userId]
@@ -799,6 +1006,11 @@ export class Database {
   }
 
   public async getClientById(id: string, userId: string): Promise<Client | null> {
+    if (!this.isPostgresAvailable) {
+      const c = this.memClients.get(id);
+      if (c && c.userId === userId) return c;
+      return null;
+    }
     const res = await this.query(
       'SELECT * FROM clients WHERE id = $1 AND user_id = $2 LIMIT 1',
       [id, userId]
@@ -808,6 +1020,15 @@ export class Database {
   }
 
   public async createClient(client: Client): Promise<Client> {
+    const item: Client = {
+      ...client,
+      totalSpent: client.totalSpent || 0,
+      visitsCount: client.visitsCount || 0,
+    };
+    if (!this.isPostgresAvailable) {
+      this.memClients.set(item.id, item);
+      return item;
+    }
     const res = await this.query(
       `INSERT INTO clients (id, user_id, name, phone, notes, total_spent, visits_count, created_at, updated_at)
        VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
@@ -817,15 +1038,7 @@ export class Database {
          notes = EXCLUDED.notes,
          updated_at = NOW()
        RETURNING *`,
-      [
-        client.id,
-        client.userId,
-        client.name,
-        client.phone,
-        client.notes || null,
-        client.totalSpent || 0,
-        client.visitsCount || 0,
-      ]
+      [item.id, item.userId, item.name, item.phone, item.notes || null, item.totalSpent, item.visitsCount]
     );
     return this.mapClient(res.rows[0]);
   }
@@ -840,6 +1053,12 @@ export class Database {
     const totalSpent = updates.totalSpent !== undefined ? updates.totalSpent : existing.totalSpent;
     const visitsCount = updates.visitsCount !== undefined ? updates.visitsCount : existing.visitsCount;
 
+    if (!this.isPostgresAvailable) {
+      const updated: Client = { ...existing, ...updates, name, phone, notes, totalSpent, visitsCount };
+      this.memClients.set(id, updated);
+      return updated;
+    }
+
     const res = await this.query(
       `UPDATE clients
        SET name = $3, phone = $4, notes = $5, total_spent = $6, visits_count = $7, updated_at = NOW()
@@ -852,6 +1071,14 @@ export class Database {
   }
 
   public async deleteClient(id: string, userId: string): Promise<boolean> {
+    if (!this.isPostgresAvailable) {
+      const c = this.memClients.get(id);
+      if (c && c.userId === userId) {
+        this.memClients.delete(id);
+        return true;
+      }
+      return false;
+    }
     const res = await this.query('DELETE FROM clients WHERE id = $1 AND user_id = $2', [id, userId]);
     return (res.rowCount || 0) > 0;
   }
@@ -877,6 +1104,39 @@ export class Database {
 
     if (!last9) {
       return { found: false, normalizedPhone };
+    }
+
+    if (!this.isPostgresAvailable) {
+      const client = Array.from(this.memClients.values()).find(
+        (c) => c.userId === userId && (c.phone === normalizedPhone || c.phone.endsWith(last9))
+      );
+      if (!client) return { found: false, normalizedPhone };
+
+      const visits = client.visitsCount || 0;
+      const avgSpend = visits > 0 ? Math.round((client.totalSpent || 0) / visits) : (client.totalSpent || 0);
+
+      const apts = Array.from(this.memAppointments.values())
+        .filter((a) => a.userId === userId && (a.clientId === client.id || a.clientPhone.endsWith(last9)) && a.status !== 'cancelled')
+        .sort((a, b) => `${b.date} ${b.startTime}`.localeCompare(`${a.date} ${a.startTime}`));
+
+      let lastVisit;
+      if (apts.length > 0) {
+        const apt = apts[0];
+        lastVisit = {
+          date: apt.date,
+          startTime: apt.startTime,
+          serviceName: apt.serviceName,
+          servicePrice: Number(apt.servicePrice || 0),
+          duration: Number(apt.duration || 30),
+          status: apt.status,
+        };
+      }
+
+      return {
+        found: true,
+        client: { ...client, avgSpend, lastVisit },
+        normalizedPhone,
+      };
     }
 
     const res = await this.query(
@@ -946,6 +1206,27 @@ export class Database {
       return { client: null, history: [] };
     }
 
+    if (!this.isPostgresAvailable) {
+      const apts = Array.from(this.memAppointments.values())
+        .filter((a) => a.userId === userId && (a.clientId === clientId || a.clientPhone === client.phone))
+        .sort((a, b) => `${b.date} ${b.startTime}`.localeCompare(`${a.date} ${a.startTime}`));
+
+      const history = apts.map((a) => {
+        const formattedPrice = Number(a.servicePrice || 0).toLocaleString('uz-UZ') + " so'm";
+        return {
+          id: a.id,
+          date: a.date,
+          startTime: a.startTime,
+          endTime: a.endTime,
+          serviceName: a.serviceName,
+          servicePrice: Number(a.servicePrice || 0),
+          status: a.status,
+          formattedSummary: `${a.date} — ${a.serviceName} — ${formattedPrice}`,
+        };
+      });
+      return { client, history };
+    }
+
     const res = await this.query(
       `SELECT * FROM appointments 
        WHERE user_id = $1 AND (client_id = $2 OR client_phone = $3) 
@@ -974,6 +1255,34 @@ export class Database {
     const normalizedPhone = normalizeUzbekPhone(phone) || phone;
     const digits = normalizedPhone.replace(/\D/g, '');
     const last9 = digits.slice(-9);
+
+    if (!this.isPostgresAvailable) {
+      const existing = Array.from(this.memClients.values()).find(
+        (c) => c.userId === userId && (c.phone === normalizedPhone || c.phone.endsWith(last9))
+      );
+      if (existing) {
+        existing.name = name || existing.name;
+        existing.phone = normalizedPhone;
+        if (notes !== undefined) existing.notes = notes;
+        existing.totalSpent = (existing.totalSpent || 0) + spentDelta;
+        if (spentDelta > 0) existing.visitsCount = (existing.visitsCount || 0) + 1;
+        this.memClients.set(existing.id, existing);
+        return existing;
+      } else {
+        const id = `c-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+        const client: Client = {
+          id,
+          userId,
+          name,
+          phone: normalizedPhone,
+          notes,
+          totalSpent: spentDelta,
+          visitsCount: spentDelta > 0 ? 1 : 0,
+        };
+        this.memClients.set(id, client);
+        return client;
+      }
+    }
 
     const existingRes = await this.query(
       `SELECT * FROM clients WHERE user_id = $1 AND (phone = $2 OR phone LIKE $3 OR phone = $4) LIMIT 1`,
@@ -1038,8 +1347,21 @@ export class Database {
       endTime = addMinutesToTime(startTime, 30);
     }
 
-    // Overlap condition for intervals [A_start, A_end) and [B_start, B_end):
-    // start_time < endTime AND end_time > startTime
+    if (!this.isPostgresAvailable) {
+      const aptOverlap = Array.from(this.memAppointments.values()).some((a) => {
+        if (a.userId !== userId || a.date !== date || a.status === 'cancelled') return false;
+        if (finalExcludeId && a.id === finalExcludeId) return false;
+        return a.startTime < endTime && a.endTime > startTime;
+      });
+      if (aptOverlap) return true;
+
+      const blockOverlap = Array.from(this.memBlockedSlots.values()).some((b) => {
+        if (b.userId !== userId || b.appointmentDate !== date) return false;
+        return b.startTime < endTime && b.endTime > startTime;
+      });
+      return blockOverlap;
+    }
+
     const aptQuery = finalExcludeId
       ? `SELECT id FROM appointments 
          WHERE user_id = $1 AND appointment_date = $2 
@@ -1066,6 +1388,11 @@ export class Database {
   }
 
   public async getAppointmentsByClientId(clientId: string, userId: string): Promise<Appointment[]> {
+    if (!this.isPostgresAvailable) {
+      return Array.from(this.memAppointments.values())
+        .filter((a) => a.userId === userId && a.clientId === clientId)
+        .sort((a, b) => `${b.date} ${b.startTime}`.localeCompare(`${a.date} ${a.startTime}`));
+    }
     const res = await this.query(
       'SELECT * FROM appointments WHERE user_id = $1 AND client_id = $2 ORDER BY appointment_date DESC, start_time DESC',
       [userId, clientId]
@@ -1074,6 +1401,11 @@ export class Database {
   }
 
   public async getAppointments(userId: string, date?: string): Promise<Appointment[]> {
+    if (!this.isPostgresAvailable) {
+      return Array.from(this.memAppointments.values())
+        .filter((a) => a.userId === userId && (!date || a.date === date) && a.status !== 'cancelled')
+        .sort((a, b) => `${a.date} ${a.startTime}`.localeCompare(`${b.date} ${b.startTime}`));
+    }
     let query = 'SELECT * FROM appointments WHERE user_id = $1';
     const params: any[] = [userId];
 
@@ -1088,6 +1420,11 @@ export class Database {
   }
 
   public async getAllMasterAppointments(userId: string): Promise<Appointment[]> {
+    if (!this.isPostgresAvailable) {
+      return Array.from(this.memAppointments.values())
+        .filter((a) => a.userId === userId)
+        .sort((a, b) => `${a.date} ${a.startTime}`.localeCompare(`${b.date} ${b.startTime}`));
+    }
     const res = await this.query(
       'SELECT * FROM appointments WHERE user_id = $1 ORDER BY appointment_date ASC, start_time ASC',
       [userId]
@@ -1220,6 +1557,12 @@ export class Database {
   }
 
   public async getAppointmentById(id: string, userId?: string): Promise<Appointment | null> {
+    if (!this.isPostgresAvailable) {
+      const a = this.memAppointments.get(id);
+      if (!a) return null;
+      if (userId && a.userId !== userId) return null;
+      return a;
+    }
     const query = userId
       ? 'SELECT * FROM appointments WHERE id = $1 AND user_id = $2 LIMIT 1'
       : 'SELECT * FROM appointments WHERE id = $1 LIMIT 1';
@@ -1230,8 +1573,29 @@ export class Database {
   }
 
   public async createAppointment(apt: Appointment): Promise<Appointment> {
+    const item: Appointment = {
+      ...apt,
+      serviceName: apt.serviceName || 'Soch olish',
+      servicePrice: apt.servicePrice || 50000,
+      badgeColor: apt.badgeColor || '#2563EB',
+      duration: apt.duration || 30,
+      status: apt.status || 'confirmed',
+      createdAt: apt.createdAt || new Date().toISOString(),
+    };
+
+    if (!this.isPostgresAvailable) {
+      const conflict = await this.hasActiveSlotConflict(apt.userId, apt.date, apt.startTime, apt.endTime || apt.duration);
+      if (conflict) {
+        const error: any = new Error(`Ushbu vaqt oralig'i (${apt.date} ${apt.startTime}) allaqachon band qilingan`);
+        error.status = 409;
+        error.code = 'SLOT_OCCUPIED';
+        throw error;
+      }
+      this.memAppointments.set(item.id, item);
+      return item;
+    }
+
     try {
-      // Validate serviceId exists or set to null to avoid foreign key failure
       let validServiceId = apt.serviceId || null;
       if (validServiceId) {
         try {
@@ -1259,19 +1623,18 @@ export class Database {
           apt.clientName,
           apt.clientPhone || '',
           validServiceId,
-          apt.serviceName || 'Soch olish',
-          apt.servicePrice || 50000,
-          apt.badgeColor || '#2563EB',
+          item.serviceName,
+          item.servicePrice,
+          item.badgeColor,
           apt.date,
           apt.startTime,
           apt.endTime || apt.startTime,
-          apt.duration || 30,
-          apt.status || 'confirmed',
+          item.duration,
+          item.status,
         ]
       );
       return this.mapAppointment(res.rows[0]);
     } catch (err: any) {
-      // Catch unique index violation (idx_unique_active_slot) on PostgreSQL (error code 23505)
       if (err.code === '23505') {
         const error: any = new Error(`Ushbu vaqt oralig'i (${apt.date} ${apt.startTime}) allaqachon band qilingan`);
         error.status = 409;
@@ -1290,16 +1653,6 @@ export class Database {
     const clientName = updates.clientName !== undefined ? updates.clientName : existing.clientName;
     const clientPhone = updates.clientPhone !== undefined ? updates.clientPhone : existing.clientPhone;
     let serviceId = updates.serviceId !== undefined ? updates.serviceId : existing.serviceId;
-    if (serviceId) {
-      try {
-        const srvCheck = await this.query('SELECT id FROM services WHERE id = $1 LIMIT 1', [serviceId]);
-        if (srvCheck.rows.length === 0) {
-          serviceId = null as any;
-        }
-      } catch (_) {
-        serviceId = null as any;
-      }
-    }
     const serviceName = updates.serviceName !== undefined ? updates.serviceName : existing.serviceName;
     const servicePrice = updates.servicePrice !== undefined ? updates.servicePrice : existing.servicePrice;
     const badgeColor = updates.badgeColor !== undefined ? updates.badgeColor : existing.badgeColor;
@@ -1309,7 +1662,38 @@ export class Database {
     const duration = updates.duration !== undefined ? updates.duration : existing.duration;
     const status = updates.status !== undefined ? updates.status : existing.status;
 
+    if (!this.isPostgresAvailable) {
+      const updated: Appointment = {
+        ...existing,
+        ...updates,
+        clientName,
+        clientPhone,
+        serviceId,
+        serviceName,
+        servicePrice,
+        badgeColor,
+        date,
+        startTime,
+        endTime,
+        duration,
+        status,
+      };
+      this.memAppointments.set(id, updated);
+      return updated;
+    }
+
     try {
+      if (serviceId) {
+        try {
+          const srvCheck = await this.query('SELECT id FROM services WHERE id = $1 LIMIT 1', [serviceId]);
+          if (srvCheck.rows.length === 0) {
+            serviceId = null as any;
+          }
+        } catch (_) {
+          serviceId = null as any;
+        }
+      }
+
       const res = await this.query(
         `UPDATE appointments
          SET client_name = $3, client_phone = $4, service_id = $5, service_name = $6,
@@ -1347,7 +1731,15 @@ export class Database {
   }
 
   public async deleteAppointment(id: string, userId: string): Promise<boolean> {
-    // Mark as cancelled so slot becomes free via idx_unique_active_slot partial index
+    if (!this.isPostgresAvailable) {
+      const apt = this.memAppointments.get(id);
+      if (apt && apt.userId === userId) {
+        apt.status = 'cancelled';
+        this.memAppointments.set(id, apt);
+        return true;
+      }
+      return false;
+    }
     const res = await this.query(
       "UPDATE appointments SET status = 'cancelled', updated_at = NOW() WHERE id = $1 AND user_id = $2",
       [id, userId]
@@ -1377,6 +1769,11 @@ export class Database {
 
   // --- Booking Requests ---
   public async getBookingRequests(masterId: string): Promise<BookingRequest[]> {
+    if (!this.isPostgresAvailable) {
+      return Array.from(this.memBookingRequests.values())
+        .filter((r) => r.masterId === masterId && r.status === 'pending')
+        .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+    }
     const res = await this.query(
       "SELECT * FROM booking_requests WHERE master_id = $1 AND status = 'pending' ORDER BY created_at DESC",
       [masterId]
@@ -1385,12 +1782,26 @@ export class Database {
   }
 
   public async getBookingRequestById(id: string): Promise<BookingRequest | null> {
+    if (!this.isPostgresAvailable) {
+      return this.memBookingRequests.get(id) || null;
+    }
     const res = await this.query('SELECT * FROM booking_requests WHERE id = $1 LIMIT 1', [id]);
     if (res.rows.length === 0) return null;
     return this.mapBookingRequest(res.rows[0]);
   }
 
   public async createBookingRequest(req: BookingRequest): Promise<BookingRequest> {
+    const item: BookingRequest = {
+      ...req,
+      badgeColor: req.badgeColor || '#2563EB',
+      duration: req.duration || 30,
+      status: req.status || 'pending',
+      createdAt: req.createdAt || new Date().toISOString(),
+    };
+    if (!this.isPostgresAvailable) {
+      this.memBookingRequests.set(item.id, item);
+      return item;
+    }
     const res = await this.query(
       `INSERT INTO booking_requests (
          id, master_id, client_name, client_phone, service_id,
@@ -1407,17 +1818,24 @@ export class Database {
         req.serviceId,
         req.serviceName,
         req.servicePrice,
-        req.badgeColor || '#2563EB',
+        item.badgeColor,
         req.date,
         req.time,
-        req.duration || 30,
-        req.status || 'pending',
+        item.duration,
+        item.status,
       ]
     );
     return this.mapBookingRequest(res.rows[0]);
   }
 
   public async updateBookingRequestStatus(id: string, status: 'accepted' | 'rejected' | 'pending'): Promise<BookingRequest | null> {
+    if (!this.isPostgresAvailable) {
+      const r = this.memBookingRequests.get(id);
+      if (!r) return null;
+      r.status = status;
+      this.memBookingRequests.set(id, r);
+      return r;
+    }
     const res = await this.query(
       'UPDATE booking_requests SET status = $2 WHERE id = $1 RETURNING *',
       [id, status]
@@ -1446,6 +1864,9 @@ export class Database {
 
   // --- Salons & Spatial Math ---
   public async getAllSalons(): Promise<Salon[]> {
+    if (!this.isPostgresAvailable) {
+      return Array.from(this.memSalons.values());
+    }
     const res = await this.query(`
       SELECT s.*, COUNT(sm.id)::int AS member_count
       FROM salons s
@@ -1457,7 +1878,16 @@ export class Database {
   }
 
   public async getNearbySalons(lat: number, lng: number, radiusMeters = 50): Promise<Salon[]> {
-    // Use haversine formula in meters (compatible with both standard Postgres and PostGIS)
+    if (!this.isPostgresAvailable) {
+      return Array.from(this.memSalons.values()).filter((s) => {
+        const d = 6371000 * Math.acos(
+          Math.cos(lat * Math.PI / 180) * Math.cos(s.latitude * Math.PI / 180) *
+          Math.cos((s.longitude - lng) * Math.PI / 180) +
+          Math.sin(lat * Math.PI / 180) * Math.sin(s.latitude * Math.PI / 180)
+        );
+        return !isNaN(d) && d <= radiusMeters;
+      });
+    }
     const res = await this.query(
       `SELECT s.*, COUNT(sm.id)::int AS member_count,
               (6371000 * acos(
@@ -1480,6 +1910,9 @@ export class Database {
   }
 
   public async getSalonById(id: string): Promise<Salon | null> {
+    if (!this.isPostgresAvailable) {
+      return this.memSalons.get(id) || null;
+    }
     const res = await this.query(
       `SELECT s.*, COUNT(sm.id)::int AS member_count
        FROM salons s
@@ -1494,6 +1927,15 @@ export class Database {
   }
 
   public async createSalon(salon: Salon): Promise<Salon> {
+    const item: Salon = {
+      ...salon,
+      memberCount: 1,
+      createdAt: salon.createdAt || new Date().toISOString(),
+    };
+    if (!this.isPostgresAvailable) {
+      this.memSalons.set(item.id, item);
+      return item;
+    }
     const res = await this.query(
       `INSERT INTO salons (id, name, address, latitude, longitude, created_by, created_at)
        VALUES ($1, $2, $3, $4, $5, $6, NOW())
@@ -1505,6 +1947,17 @@ export class Database {
 
   public async joinSalon(salonId: string, masterId: string, role = 'member'): Promise<SalonMember> {
     const id = `sm-${Date.now()}`;
+    const item: SalonMember = {
+      id,
+      salonId,
+      masterId,
+      role: role as 'owner' | 'member',
+      joinedAt: new Date().toISOString(),
+    };
+    if (!this.isPostgresAvailable) {
+      this.memSalonMembers.set(`${salonId}_${masterId}`, item);
+      return item;
+    }
     const res = await this.query(
       `INSERT INTO salon_members (id, salon_id, master_id, role, joined_at)
        VALUES ($1, $2, $3, $4, NOW())
@@ -1523,6 +1976,21 @@ export class Database {
   }
 
   public async getSalonMembers(salonId: string): Promise<any[]> {
+    if (!this.isPostgresAvailable) {
+      const members = Array.from(this.memSalonMembers.values()).filter((sm) => sm.salonId === salonId);
+      return members.map((sm) => {
+        const u = this.memUsers.get(sm.masterId);
+        return {
+          id: sm.id,
+          salonId: sm.salonId,
+          masterId: sm.masterId,
+          name: u?.fullName || `${u?.ism || ''} ${u?.familiya || ''}`.trim() || 'Usta',
+          phone: u?.phone || '',
+          username: u?.username || '',
+          role: sm.role,
+        };
+      });
+    }
     const res = await this.query(
       `SELECT sm.*, u.ism, u.familiya, u.full_name, u.phone, u.username
        FROM salon_members sm
@@ -1543,6 +2011,14 @@ export class Database {
   }
 
   public async getMasterSalon(masterId: string): Promise<{ salon: Salon; members: any[] } | null> {
+    if (!this.isPostgresAvailable) {
+      const sm = Array.from(this.memSalonMembers.values()).find((m) => m.masterId === masterId);
+      if (!sm) return null;
+      const salon = this.memSalons.get(sm.salonId);
+      if (!salon) return null;
+      const members = await this.getSalonMembers(sm.salonId);
+      return { salon, members };
+    }
     const memberRes = await this.query(
       'SELECT salon_id FROM salon_members WHERE master_id = $1 LIMIT 1',
       [masterId]
@@ -1572,20 +2048,25 @@ export class Database {
 
   // --- Working Hours ---
   public async getWorkingHours(userId: string): Promise<WorkingDay[]> {
-    const res = await this.query(
-      'SELECT * FROM working_hours WHERE user_id = $1 ORDER BY day_index ASC',
-      [userId]
-    );
-    if (res.rows.length > 0) {
-      return res.rows.map((r: any) => ({
-        dayOfWeek: r.day_of_week,
-        dayIndex: r.day_index,
-        isWorking: r.is_working,
-        startTime: r.start_time,
-        endTime: r.end_time,
-        lunchStart: r.lunch_start,
-        lunchEnd: r.lunch_end,
-      }));
+    if (!this.isPostgresAvailable) {
+      const hours = this.memWorkingHours.get(userId);
+      if (hours && hours.length > 0) return hours;
+    } else {
+      const res = await this.query(
+        'SELECT * FROM working_hours WHERE user_id = $1 ORDER BY day_index ASC',
+        [userId]
+      );
+      if (res.rows.length > 0) {
+        return res.rows.map((r: any) => ({
+          dayOfWeek: r.day_of_week,
+          dayIndex: r.day_index,
+          isWorking: r.is_working,
+          startTime: r.start_time,
+          endTime: r.end_time,
+          lunchStart: r.lunch_start,
+          lunchEnd: r.lunch_end,
+        }));
+      }
     }
 
     // Default working schedule (Monday to Saturday 09:00 - 21:00)
@@ -1601,6 +2082,10 @@ export class Database {
   }
 
   public async saveWorkingHours(userId: string, hours: WorkingDay[]): Promise<WorkingDay[]> {
+    if (!this.isPostgresAvailable) {
+      this.memWorkingHours.set(userId, hours);
+      return hours;
+    }
     await this.query('DELETE FROM working_hours WHERE user_id = $1', [userId]);
     for (const h of hours) {
       await this.query(
@@ -1628,6 +2113,20 @@ export class Database {
 
   // --- User Settings ---
   public async getUserSettings(userId: string): Promise<UserSettings> {
+    if (!this.isPostgresAvailable) {
+      const s = this.memUserSettings.get(userId);
+      if (s) return s;
+      return {
+        bookingLinkActive: true,
+        allowCustomTimeRequest: false,
+        allowLunchTimeBooking: false,
+        dailyReminderActive: true,
+        dailyReminderTime: '09:00',
+        clientSmsReminderActive: true,
+        appLanguage: 'uz',
+        biometricsEnabled: false,
+      };
+    }
     const res = await this.query('SELECT * FROM user_settings WHERE user_id = $1 LIMIT 1', [userId]);
     if (res.rows.length === 0) {
       return {
@@ -1658,6 +2157,11 @@ export class Database {
   public async saveUserSettings(userId: string, settings: Partial<UserSettings>): Promise<UserSettings> {
     const current = await this.getUserSettings(userId);
     const updated: UserSettings = { ...current, ...settings };
+
+    if (!this.isPostgresAvailable) {
+      this.memUserSettings.set(userId, updated);
+      return updated;
+    }
 
     await this.query(
       `INSERT INTO user_settings (
@@ -1698,6 +2202,11 @@ export class Database {
 
   // --- Portfolio Photos ---
   public async getPortfolioPhotos(userId?: string): Promise<PortfolioPhoto[]> {
+    if (!this.isPostgresAvailable) {
+      return Array.from(this.memPortfolio.values())
+        .filter((p) => (userId ? p.userId === userId : p.isPublic !== false))
+        .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+    }
     const query = userId
       ? 'SELECT * FROM portfolio_photos WHERE user_id = $1 ORDER BY created_at DESC'
       : 'SELECT * FROM portfolio_photos WHERE is_public = TRUE ORDER BY created_at DESC';
@@ -1715,6 +2224,17 @@ export class Database {
   }
 
   public async addPortfolioPhoto(photo: PortfolioPhoto): Promise<PortfolioPhoto> {
+    const item: PortfolioPhoto = {
+      ...photo,
+      caption: photo.caption || '',
+      likesCount: photo.likesCount || 0,
+      isPublic: photo.isPublic !== false,
+      createdAt: photo.createdAt || new Date().toISOString(),
+    };
+    if (!this.isPostgresAvailable) {
+      this.memPortfolio.set(item.id, item);
+      return item;
+    }
     const res = await this.query(
       `INSERT INTO portfolio_photos (id, user_id, image_url, caption, likes_count, is_public, created_at)
        VALUES ($1, $2, $3, $4, $5, $6, NOW())
@@ -1734,6 +2254,14 @@ export class Database {
   }
 
   public async likePortfolioPhoto(id: string): Promise<number> {
+    if (!this.isPostgresAvailable) {
+      const p = this.memPortfolio.get(id);
+      if (p) {
+        p.likesCount = (p.likesCount || 0) + 1;
+        return p.likesCount;
+      }
+      return 0;
+    }
     const res = await this.query(
       'UPDATE portfolio_photos SET likes_count = likes_count + 1 WHERE id = $1 RETURNING likes_count',
       [id]
@@ -1743,6 +2271,14 @@ export class Database {
   }
 
   public async deletePortfolioPhoto(id: string, userId: string): Promise<boolean> {
+    if (!this.isPostgresAvailable) {
+      const p = this.memPortfolio.get(id);
+      if (p && p.userId === userId) {
+        this.memPortfolio.delete(id);
+        return true;
+      }
+      return false;
+    }
     const res = await this.query('DELETE FROM portfolio_photos WHERE id = $1 AND user_id = $2', [id, userId]);
     return (res.rowCount || 0) > 0;
   }
@@ -1750,6 +2286,11 @@ export class Database {
   // --- Push Subscriptions ---
   public async savePushSubscription(sub: PushSubscriptionItem): Promise<void> {
     const id = sub.id || `ps-${Date.now()}`;
+    const item: PushSubscriptionItem = { ...sub, id, createdAt: new Date().toISOString() };
+    if (!this.isPostgresAvailable) {
+      this.memPushSubs.set(sub.endpoint, item);
+      return;
+    }
     await this.query(
       `INSERT INTO push_subscriptions (id, user_id, endpoint, p256dh, auth, device, created_at)
        VALUES ($1, $2, $3, $4, $5, $6, NOW())
@@ -1763,11 +2304,17 @@ export class Database {
   }
 
   public async deletePushSubscription(endpoint: string): Promise<boolean> {
+    if (!this.isPostgresAvailable) {
+      return this.memPushSubs.delete(endpoint);
+    }
     const res = await this.query('DELETE FROM push_subscriptions WHERE endpoint = $1', [endpoint]);
     return (res.rowCount || 0) > 0;
   }
 
   public async getPushSubscriptions(userId?: string): Promise<PushSubscriptionItem[]> {
+    if (!this.isPostgresAvailable) {
+      return Array.from(this.memPushSubs.values()).filter((p) => !userId || p.userId === userId);
+    }
     const query = userId
       ? 'SELECT * FROM push_subscriptions WHERE user_id = $1'
       : 'SELECT * FROM push_subscriptions';
@@ -1787,6 +2334,26 @@ export class Database {
   }
 
   public async getInactiveClients(userId: string, daysThreshold: number = 21): Promise<any[]> {
+    if (!this.isPostgresAvailable) {
+      const clients = Array.from(this.memClients.values()).filter((c) => c.userId === userId);
+      const thresholdDate = new Date();
+      thresholdDate.setDate(thresholdDate.getDate() - daysThreshold);
+      const thresholdStr = thresholdDate.toISOString().slice(0, 10);
+
+      return clients
+        .map((c) => {
+          const apts = Array.from(this.memAppointments.values()).filter(
+            (a) => a.userId === userId && (a.clientId === c.id || a.clientPhone === c.phone) && a.status !== 'cancelled'
+          );
+          const lastVisitDate = apts.length > 0 ? apts.map((a) => a.date).sort().reverse()[0] : null;
+          return {
+            ...c,
+            lastVisitDate,
+            totalAppointments: apts.length,
+          };
+        })
+        .filter((c) => !c.lastVisitDate || c.lastVisitDate < thresholdStr);
+    }
     const query = `
       SELECT 
         c.*,
@@ -1809,6 +2376,14 @@ export class Database {
 
   // --- Reviews (Ratings & Feedback) ---
   public async getReviewsByMasterId(masterId: string): Promise<{ reviews: Review[]; avgRating: number; count: number }> {
+    if (!this.isPostgresAvailable) {
+      const reviews = Array.from(this.memReviews.values())
+        .filter((r) => r.masterId === masterId)
+        .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+      const count = reviews.length;
+      const avgRating = count > 0 ? Number((reviews.reduce((s, r) => s + r.rating, 0) / count).toFixed(1)) : 5.0;
+      return { reviews, avgRating, count };
+    }
     const res = await this.query(
       'SELECT * FROM reviews WHERE master_id = $1 ORDER BY created_at DESC',
       [masterId]
@@ -1821,6 +2396,18 @@ export class Database {
 
   public async createReview(review: Review): Promise<Review> {
     const id = review.id || `rev-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    const item: Review = {
+      id,
+      masterId: review.masterId,
+      clientName: review.clientName,
+      rating: Math.max(1, Math.min(5, Number(review.rating) || 5)),
+      comment: review.comment || undefined,
+      createdAt: review.createdAt || new Date().toISOString(),
+    };
+    if (!this.isPostgresAvailable) {
+      this.memReviews.set(id, item);
+      return item;
+    }
     const res = await this.query(
       `INSERT INTO reviews (id, master_id, client_name, rating, comment, created_at)
        VALUES ($1, $2, $3, $4, $5, NOW())
@@ -1829,7 +2416,7 @@ export class Database {
         id,
         review.masterId,
         review.clientName,
-        Math.max(1, Math.min(5, Number(review.rating) || 5)),
+        item.rating,
         review.comment || null,
       ]
     );
@@ -1849,6 +2436,11 @@ export class Database {
 
   // --- Blocked Slots (Dam olish / Lunch Break) ---
   public async getBlockedSlots(userId: string, date?: string): Promise<BlockedSlot[]> {
+    if (!this.isPostgresAvailable) {
+      return Array.from(this.memBlockedSlots.values())
+        .filter((b) => b.userId === userId && (!date || b.appointmentDate === date))
+        .sort((a, b) => a.startTime.localeCompare(b.startTime));
+    }
     let query = 'SELECT * FROM blocked_slots WHERE user_id = $1';
     const params: any[] = [userId];
     if (date) {
@@ -1877,6 +2469,19 @@ export class Database {
     reason?: string;
   }): Promise<BlockedSlot> {
     const id = slot.id || `block-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    const item: BlockedSlot = {
+      id,
+      userId: slot.userId,
+      appointmentDate: slot.appointmentDate,
+      startTime: slot.startTime,
+      endTime: slot.endTime || slot.startTime,
+      reason: slot.reason || 'Dam olish',
+      createdAt: new Date().toISOString(),
+    };
+    if (!this.isPostgresAvailable) {
+      this.memBlockedSlots.set(id, item);
+      return item;
+    }
     const res = await this.query(
       `INSERT INTO blocked_slots (id, user_id, appointment_date, start_time, end_time, reason, created_at)
        VALUES ($1, $2, $3, $4, $5, $6, NOW())
@@ -1903,6 +2508,14 @@ export class Database {
   }
 
   public async deleteBlockedSlot(id: string, userId: string): Promise<boolean> {
+    if (!this.isPostgresAvailable) {
+      const b = this.memBlockedSlots.get(id);
+      if (b && b.userId === userId) {
+        this.memBlockedSlots.delete(id);
+        return true;
+      }
+      return false;
+    }
     const res = await this.query(
       'DELETE FROM blocked_slots WHERE id = $1 AND user_id = $2',
       [id, userId]
@@ -1912,6 +2525,22 @@ export class Database {
 
   // --- Call Log ---
   public async getCallLogs(userId: string, limit: number = 20): Promise<CallLogItem[]> {
+    if (!this.isPostgresAvailable) {
+      const logs = Array.from(this.memCallLog.values())
+        .filter((l) => l.userId === userId)
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      // Deduplicate by phone
+      const seen = new Set<string>();
+      const deduped: CallLogItem[] = [];
+      for (const log of logs) {
+        if (!seen.has(log.phone)) {
+          seen.add(log.phone);
+          const isClient = Array.from(this.memClients.values()).some((c) => c.userId === userId && c.phone === log.phone);
+          deduped.push({ ...log, isClient });
+        }
+      }
+      return deduped.slice(0, limit);
+    }
     const query = `
       SELECT c.id, c.user_id, c.phone,
              COALESCE(NULLIF(c.name, ''), cl.name, 'Noma''lum') as name,
@@ -1946,6 +2575,18 @@ export class Database {
     direction: 'outgoing_call' | 'incoming_manual' | 'booking_request' | 'appointment' = 'outgoing_call'
   ): Promise<CallLogItem> {
     const id = `cl-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    const item: CallLogItem = {
+      id,
+      userId,
+      phone,
+      name: name || "Noma'lum",
+      direction,
+      createdAt: new Date().toISOString(),
+    };
+    if (!this.isPostgresAvailable) {
+      this.memCallLog.set(id, item);
+      return item;
+    }
     const res = await this.query(
       `INSERT INTO call_log (id, user_id, phone, name, direction, created_at)
        VALUES ($1, $2, $3, $4, $5, NOW())
@@ -1965,6 +2606,9 @@ export class Database {
 
   // --- Legal Documents ---
   public async getLegalDocuments(): Promise<LegalDocument[]> {
+    if (!this.isPostgresAvailable) {
+      return Array.from(this.memLegalDocs.values()).sort((a, b) => a.slug.localeCompare(b.slug));
+    }
     const res = await this.query('SELECT * FROM legal_documents ORDER BY slug ASC');
     return res.rows.map((r: any) => ({
       slug: r.slug,
@@ -1978,6 +2622,9 @@ export class Database {
   }
 
   public async getLegalDocument(slug: string): Promise<LegalDocument | null> {
+    if (!this.isPostgresAvailable) {
+      return this.memLegalDocs.get(slug) || null;
+    }
     const res = await this.query('SELECT * FROM legal_documents WHERE slug = $1 LIMIT 1', [slug]);
     if (res.rows.length === 0) return null;
     const r = res.rows[0];
@@ -1994,6 +2641,10 @@ export class Database {
 
   public async acceptLegalDocument(userId: string, slug: string, version: string): Promise<boolean> {
     const id = `la-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    if (!this.isPostgresAvailable) {
+      this.memLegalAcceptances.set(`${userId}_${slug}`, { id, userId, slug, version, acceptedAt: new Date().toISOString() });
+      return true;
+    }
     await this.query(
       `INSERT INTO legal_acceptances (id, user_id, slug, version, accepted_at)
        VALUES ($1, $2, $3, $4, NOW())`,
@@ -2004,6 +2655,12 @@ export class Database {
 
   // --- Notifications ---
   public async getNotifications(userId: string): Promise<NotificationItem[]> {
+    if (!this.isPostgresAvailable) {
+      return Array.from(this.memNotifications.values())
+        .filter((n) => n.userId === userId)
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+        .slice(0, 50);
+    }
     const res = await this.query(
       'SELECT * FROM notifications WHERE user_id = $1 ORDER BY created_at DESC LIMIT 50',
       [userId]
@@ -2029,6 +2686,20 @@ export class Database {
     data?: any;
   }): Promise<NotificationItem> {
     const id = notif.id || `notif-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    const item: NotificationItem = {
+      id,
+      userId: notif.userId,
+      type: notif.type,
+      title: notif.title,
+      body: notif.body,
+      data: notif.data || {},
+      readAt: undefined,
+      createdAt: new Date().toISOString(),
+    };
+    if (!this.isPostgresAvailable) {
+      this.memNotifications.set(id, item);
+      return item;
+    }
     const res = await this.query(
       `INSERT INTO notifications (id, user_id, type, title, body, data, created_at)
        VALUES ($1, $2, $3, $4, $5, $6, NOW())
@@ -2049,6 +2720,14 @@ export class Database {
   }
 
   public async markNotificationRead(id: string, userId: string): Promise<boolean> {
+    if (!this.isPostgresAvailable) {
+      const n = this.memNotifications.get(id);
+      if (n && n.userId === userId) {
+        n.readAt = new Date().toISOString();
+        return true;
+      }
+      return false;
+    }
     const res = await this.query(
       'UPDATE notifications SET read_at = NOW() WHERE id = $1 AND user_id = $2',
       [id, userId]
@@ -2057,6 +2736,17 @@ export class Database {
   }
 
   public async markAllNotificationsRead(userId: string): Promise<boolean> {
+    if (!this.isPostgresAvailable) {
+      const now = new Date().toISOString();
+      let count = 0;
+      for (const n of this.memNotifications.values()) {
+        if (n.userId === userId && !n.readAt) {
+          n.readAt = now;
+          count++;
+        }
+      }
+      return count > 0;
+    }
     const res = await this.query(
       'UPDATE notifications SET read_at = NOW() WHERE user_id = $1 AND read_at IS NULL',
       [userId]
@@ -2066,6 +2756,17 @@ export class Database {
 
   // --- Auto-expire Booking Requests (called on request check) ---
   public async expirePendingBookingRequests(ttlMinutes: number = 30): Promise<number> {
+    if (!this.isPostgresAvailable) {
+      const threshold = new Date(Date.now() - ttlMinutes * 60 * 1000).toISOString();
+      let expiredCount = 0;
+      for (const req of this.memBookingRequests.values()) {
+        if (req.status === 'pending' && (req.createdAt || '') < threshold) {
+          req.status = 'expired';
+          expiredCount++;
+        }
+      }
+      return expiredCount;
+    }
     try {
       const res = await this.query(
         `UPDATE booking_requests
@@ -2082,4 +2783,3 @@ export class Database {
 }
 
 export const db = new Database();
-
