@@ -4,7 +4,7 @@ import { Home, Calendar, Users, PhoneCall, User } from 'lucide-react-native';
 import { colors } from '../theme/colors';
 import { useTranslation } from '../i18n/LanguageContext';
 
-export type TabKey = 'asosiy' | 'jadval' | 'mijozlar' | 'qongiroqlar' | 'profil';
+export type TabKey = 'jadval' | 'mijozlar' | 'qongiroqlar' | 'profil';
 
 interface FloatingTabBarProps {
   activeTab: TabKey;
@@ -15,10 +15,9 @@ export const FloatingTabBar: React.FC<FloatingTabBarProps> = ({ activeTab, onTab
   const { t } = useTranslation();
 
   const tabs: { key: TabKey; label: string; icon: any }[] = [
-    { key: 'asosiy', label: t('tabAsosiy', 'Asosiy'), icon: Home },
     { key: 'jadval', label: t('tabJadval', 'Jadval'), icon: Calendar },
     { key: 'mijozlar', label: t('tabMijozlar', 'Mijozlar'), icon: Users },
-    { key: 'qongiroqlar', label: t('tabQongiroqlar', 'Qo\'ng\'iroqlar'), icon: PhoneCall },
+    { key: 'qongiroqlar', label: t('tabQongiroqlar', "Qo'ng'iroqlar"), icon: PhoneCall },
     { key: 'profil', label: t('tabProfil', 'Profil'), icon: User },
   ];
 

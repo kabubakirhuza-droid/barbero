@@ -48,8 +48,8 @@ function MainApp() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const [userRole, setUserRole] = useState<UserRole | null>(null);
 
-  // Master dashboard state (default to 'asosiy' for 1-screen workday focus!)
-  const [activeTab, setActiveTab] = useState<TabKey>('asosiy');
+  // Master dashboard state (default to 'jadval' schedule view)
+  const [activeTab, setActiveTab] = useState<TabKey>('jadval');
   const [isAddServiceModalVisible, setIsAddServiceModalVisible] = useState(false);
   const [isNotificationsVisible, setIsNotificationsVisible] = useState(false);
   const [isRequestsVisible, setIsRequestsVisible] = useState(false);
@@ -293,7 +293,6 @@ function MainApp() {
 
       {/* Main Tab Screen Content */}
       <View style={[styles.contentArea, { backgroundColor: currentColors.background }]}>
-        {activeTab === 'asosiy' && <WorkdayScreen />}
         {activeTab === 'jadval' && (
           <JadvalScreen onAddServicePress={() => setIsAddServiceModalVisible(true)} />
         )}
@@ -307,7 +306,7 @@ function MainApp() {
         )}
       </View>
 
-      {/* 5-Tab Floating Nav Bar */}
+      {/* 4-Tab Floating Nav Bar */}
       <FloatingTabBar activeTab={activeTab} onTabPress={setActiveTab} />
 
       {/* Modal: So'rovlar (Booking requests) */}

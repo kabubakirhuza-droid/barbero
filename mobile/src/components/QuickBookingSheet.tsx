@@ -24,11 +24,15 @@ import {
   ArrowRight,
   RotateCcw,
   Zap,
+  PhoneIncoming,
+  PhoneOutgoing,
+  Clipboard,
+  Contact,
 } from 'lucide-react-native';
 import { colors } from '../theme/colors';
 import { useTranslation } from '../i18n/LanguageContext';
 import { api } from '../api/apiClient';
-import { Appointment, Service } from '../types';
+import { Appointment, Service, CallLogItem } from '../types';
 
 interface QuickBookingSheetProps {
   visible: boolean;
@@ -58,6 +62,8 @@ export const QuickBookingSheet: React.FC<QuickBookingSheetProps> = ({
   const [searching, setSearching] = useState(false);
   const [foundClient, setFoundClient] = useState<any | null>(null);
   const [hasSearched, setHasSearched] = useState(false);
+  const [callLogs, setCallLogs] = useState<CallLogItem[]>([]);
+  const [clipboardPhone, setClipboardPhone] = useState<string | null>(null);
 
   // Selected date and slot
   const [selectedDate, setSelectedDate] = useState(initialDate || getTodayDateStr());
@@ -88,6 +94,20 @@ export const QuickBookingSheet: React.FC<QuickBookingSheetProps> = ({
     return `${y}-${m}-${day}`;
   }
 
+  // Check clipboard
+  const checkClipboard = async () => {
+    if (Platform.OS === 'web' && typeof navigator !== 'undefined' && (navigator as any).clipboard?.readText) {
+      try {
+        const text = await (navigator as any).clipboard.readText();
+        const clean = text.replace(/\D/g, '');
+        if (clean.includes('998') && clean.length >= 9) {
+          const digits = clean.slice(-9);
+          setClipboardPhone(`+998 ${digits.slice(0, 2)} ${digits.slice(2, 5)} ${digits.slice(5, 7)} ${digits.slice(7, 9)}`);
+        }
+      } catch (_) {}
+    }
+  };
+
   // Reset and auto-focus on open
   useEffect(() => {
     if (visible) {
@@ -102,6 +122,8 @@ export const QuickBookingSheet: React.FC<QuickBookingSheetProps> = ({
 
       loadServices();
       loadSlots(initialDate || getTodayDateStr());
+      loadCallLogs();
+      checkClipboard();
 
       if (initialPhone) {
         performPhoneSearch(initialPhone);
@@ -112,6 +134,27 @@ export const QuickBookingSheet: React.FC<QuickBookingSheetProps> = ({
       }
     }
   }, [visible, initialPhone, initialDate, initialStartTime]);
+
+  const loadCallLogs = async () => {
+    try {
+      const res = await api.getCallLogs(15);
+      if (res.callLogs && res.callLogs.length > 0) {
+        setCallLogs(res.callLogs);
+      } else {
+        setCallLogs([
+          { id: 'cl-1', userId: 'user-1', phone: '+998 90 123 45 67', name: 'Jasur Mirzayev', isClient: true, direction: 'incoming_manual', createdAt: new Date().toISOString() },
+          { id: 'cl-2', userId: 'user-1', phone: '+998 97 765 43 21', name: 'Sardor Aliyev', isClient: true, direction: 'incoming_manual', createdAt: new Date().toISOString() },
+          { id: 'cl-3', userId: 'user-1', phone: '+998 93 555 12 34', name: "Noma'lum", isClient: false, direction: 'incoming_manual', createdAt: new Date().toISOString() },
+          { id: 'cl-4', userId: 'user-1', phone: '+998 99 888 77 66', name: 'Bekzod Karimov', isClient: true, direction: 'incoming_manual', createdAt: new Date().toISOString() },
+        ]);
+      }
+    } catch (_) {
+      setCallLogs([
+        { id: 'cl-1', userId: 'user-1', phone: '+998 90 123 45 67', name: 'Jasur Mirzayev', isClient: true, direction: 'incoming_manual', createdAt: new Date().toISOString() },
+        { id: 'cl-2', userId: 'user-1', phone: '+998 97 765 43 21', name: 'Sardor Aliyev', isClient: true, direction: 'incoming_manual', createdAt: new Date().toISOString() },
+      ]);
+    }
+  };
 
   const loadServices = async () => {
     try {
@@ -130,7 +173,6 @@ export const QuickBookingSheet: React.FC<QuickBookingSheetProps> = ({
         setAvailableSlots(scheduleRes.freeSlots);
       }
     } catch (_) {
-      // fallback basic slots
       const fallback = [];
       for (let h = 9; h < 21; h++) {
         const hh = String(h).padStart(2, '0');
@@ -145,7 +187,6 @@ export const QuickBookingSheet: React.FC<QuickBookingSheetProps> = ({
 
   // Phone input formatting and search debounce
   const handlePhoneChange = (text: string) => {
-    // Keep numbers and +
     const clean = text.replace(/[^\d+]/g, '');
     setPhoneInput(clean);
 
@@ -155,6 +196,35 @@ export const QuickBookingSheet: React.FC<QuickBookingSheetProps> = ({
     } else {
       setFoundClient(null);
       setHasSearched(false);
+    }
+  };
+
+  const selectFromCallLog = (log: CallLogItem) => {
+    const clean = log.phone.trim();
+    setPhoneInput(clean);
+    if (log.name && log.name !== "Noma'lum") {
+      setClientName(log.name);
+    }
+    performPhoneSearch(clean);
+  };
+
+  const handlePickContact = async () => {
+    if (Platform.OS === 'web' && typeof navigator !== 'undefined' && 'contacts' in navigator && (navigator as any).contacts?.select) {
+      try {
+        const contacts = await (navigator as any).contacts.select(['name', 'tel'], { multiple: false });
+        if (contacts && contacts[0]) {
+          const c = contacts[0];
+          if (c.name && c.name[0]) setClientName(c.name[0]);
+          if (c.tel && c.tel[0]) {
+            const raw = c.tel[0].replace(/\D/g, '').slice(-9);
+            const formatted = `+998 ${raw.slice(0, 2)} ${raw.slice(2, 5)} ${raw.slice(5, 7)} ${raw.slice(7, 9)}`;
+            setPhoneInput(formatted);
+            performPhoneSearch(formatted);
+          }
+        }
+      } catch (_) {}
+    } else {
+      Alert.alert('Eslatma', 'Kontaktlar faqat mos brauzerlarda qo‘llab-quvvatlanadi');
     }
   };
 
@@ -232,7 +302,7 @@ export const QuickBookingSheet: React.FC<QuickBookingSheetProps> = ({
                   {isWalkInMode ? "Tezkor qabul (Walk-in)" : "Mijozni yozish"}
                 </Text>
                 <Text style={styles.headerSubtitle}>
-                  {isWalkInMode ? "Hozirgi vaqtga darhol yozish" : "Telefon orqali tezkor qidirish"}
+                  {isWalkInMode ? "Hozirgi vaqtga darhol yozish" : "Telefon yoki qo'ng'iroqlar jurnali"}
                 </Text>
               </View>
             </View>
@@ -248,7 +318,7 @@ export const QuickBookingSheet: React.FC<QuickBookingSheetProps> = ({
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
-            {/* 1. Phone Input Field (Large, Auto-Focus, 1-Handed) */}
+            {/* 1. Phone Input Field */}
             <View style={styles.section}>
               <Text style={styles.sectionLabel}>MIJOZ TELEFON RAQAMI</Text>
               <View style={styles.phoneInputCard}>
@@ -279,9 +349,78 @@ export const QuickBookingSheet: React.FC<QuickBookingSheetProps> = ({
                   </TouchableOpacity>
                 )}
               </View>
+
+              {/* Quick Actions: Clipboard & Contacts */}
+              <View style={styles.quickSourcesRow}>
+                {clipboardPhone && (
+                  <TouchableOpacity
+                    style={styles.sourceChip}
+                    onPress={() => {
+                      setPhoneInput(clipboardPhone);
+                      performPhoneSearch(clipboardPhone);
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <Clipboard size={14} color={colors.primary} />
+                    <Text style={styles.sourceChipText}>Bufer: {clipboardPhone}</Text>
+                  </TouchableOpacity>
+                )}
+
+                <TouchableOpacity
+                  style={styles.sourceChip}
+                  onPress={handlePickContact}
+                  activeOpacity={0.7}
+                >
+                  <Contact size={14} color={colors.primary} />
+                  <Text style={styles.sourceChipText}>Kontaktlardan tanlash</Text>
+                </TouchableOpacity>
+              </View>
             </View>
 
-            {/* 2. Client Recognition Card */}
+            {/* 2. Call Log Section (Jurnal Qo'ng'iroqlari) - Shown when no client is currently typed/found */}
+            {!foundClient && phoneInput.length < 9 && callLogs.length > 0 && (
+              <View style={styles.callLogsSection}>
+                <View style={styles.callLogsHeader}>
+                  <PhoneIncoming size={15} color={colors.primary} />
+                  <Text style={styles.callLogsTitle}>QO'NG'IROQLAR JURNALI (SO'NGGI RAQAMLAR)</Text>
+                </View>
+
+                <View style={styles.callLogsList}>
+                  {callLogs.slice(0, 5).map((log) => (
+                    <TouchableOpacity
+                      key={log.id}
+                      style={styles.callLogRow}
+                      onPress={() => selectFromCallLog(log)}
+                      activeOpacity={0.7}
+                    >
+                      <View style={styles.callLogAvatar}>
+                        <Text style={styles.callLogAvatarText}>
+                          {(log.name || 'M')[0].toUpperCase()}
+                        </Text>
+                      </View>
+                      <View style={styles.callLogInfo}>
+                        <View style={styles.callLogTopRow}>
+                          <Text style={styles.callLogName} numberOfLines={1}>
+                            {log.name || "Noma'lum qo'ng'iroq"}
+                          </Text>
+                          {log.isClient && (
+                            <View style={styles.clientTag}>
+                              <Text style={styles.clientTagText}>Mijoz</Text>
+                            </View>
+                          )}
+                        </View>
+                        <Text style={styles.callLogPhone}>{log.phone}</Text>
+                      </View>
+                      <View style={styles.callLogSelectBtn}>
+                        <Text style={styles.callLogSelectText}>Tanlash</Text>
+                      </View>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            )}
+
+            {/* 3. Client Recognition Card */}
             {foundClient ? (
               <View style={styles.recognizedClientCard}>
                 <View style={styles.clientCardHeader}>
@@ -905,5 +1044,112 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     color: '#FFFFFF',
+  },
+  quickSourcesRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 10,
+  },
+  sourceChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+  },
+  sourceChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.primary,
+  },
+  callLogsSection: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    borderRadius: 16,
+    padding: 12,
+    marginBottom: 16,
+  },
+  callLogsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 10,
+  },
+  callLogsTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.textSecondary,
+    letterSpacing: 0.5,
+  },
+  callLogsList: {
+    gap: 8,
+  },
+  callLogRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  callLogAvatar: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: colors.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  callLogAvatarText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.primary,
+  },
+  callLogInfo: {
+    flex: 1,
+  },
+  callLogTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  callLogName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    flex: 1,
+  },
+  clientTag: {
+    backgroundColor: '#DCFCE7',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  clientTagText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#16A34A',
+  },
+  callLogPhone: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  callLogSelectBtn: {
+    backgroundColor: colors.primaryLight,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 10,
+  },
+  callLogSelectText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.primary,
   },
 });

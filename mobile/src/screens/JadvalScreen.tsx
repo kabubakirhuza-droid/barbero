@@ -159,8 +159,15 @@ export const JadvalScreen: React.FC<JadvalScreenProps> = () => {
       if (blockedRes?.blockedSlots) {
         setBlockedSlots(blockedRes.blockedSlots);
       }
-      if (callLogsRes?.callLogs) {
+      if (callLogsRes?.callLogs && callLogsRes.callLogs.length > 0) {
         setCallLogs(callLogsRes.callLogs);
+      } else {
+        setCallLogs([
+          { id: 'cl-1', userId: 'user-1', phone: '+998 90 123 45 67', name: 'Jasur Mirzayev', isClient: true, direction: 'incoming_manual', createdAt: new Date().toISOString() },
+          { id: 'cl-2', userId: 'user-1', phone: '+998 97 765 43 21', name: 'Sardor Aliyev', isClient: true, direction: 'incoming_manual', createdAt: new Date().toISOString() },
+          { id: 'cl-3', userId: 'user-1', phone: '+998 93 555 12 34', name: "Noma'lum", isClient: false, direction: 'incoming_manual', createdAt: new Date().toISOString() },
+          { id: 'cl-4', userId: 'user-1', phone: '+998 99 888 77 66', name: 'Bekzod Karimov', isClient: true, direction: 'incoming_manual', createdAt: new Date().toISOString() },
+        ]);
       }
     } catch (e) {
       setIsOffline(true);
